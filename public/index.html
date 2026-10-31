@@ -62,33 +62,48 @@
       max-width: 1440px;
       margin: 0 auto;
       display: flex;
-      flex-wrap: wrap;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .header-top-row {
+      display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
+      gap: 16px;
+      white-space: nowrap;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
     }
 
     .brand-group {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 12px;
+      min-width: 0;
     }
 
     .brand-icon {
-      width: 42px;
-      height: 42px;
-      border-radius: 11px;
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
       background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 55%, #14b8a6 100%);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 800;
       box-shadow: 0 4px 16px rgba(14, 165, 233, 0.35);
+      flex-shrink: 0;
     }
 
     .brand-title {
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 800;
       letter-spacing: -0.02em;
       display: flex;
@@ -97,7 +112,7 @@
     }
 
     .brand-badge {
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 700;
       padding: 2px 8px;
       border-radius: 999px;
@@ -109,25 +124,28 @@
     }
 
     .brand-subtitle {
-      font-size: 12px;
+      font-size: 11.5px;
       color: var(--text-secondary);
       display: flex;
       align-items: center;
       gap: 8px;
-      margin-top: 2px;
+      margin-top: 1px;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .controls-bar {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 10px;
+      width: 100%;
     }
 
     .ctrl-group {
       display: flex;
       flex-direction: column;
       gap: 3px;
+      min-width: 0;
     }
 
     .ctrl-label {
@@ -136,6 +154,9 @@
       text-transform: uppercase;
       letter-spacing: 0.05em;
       color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     select, button.btn {
@@ -143,12 +164,21 @@
       color: var(--text-primary);
       border: 1px solid var(--border-subtle);
       border-radius: 8px;
-      padding: 7px 11px;
-      font-size: 12.5px;
+      padding: 7px 10px;
+      font-size: 12px;
       font-weight: 600;
       font-family: inherit;
       cursor: pointer;
       transition: all 0.15s ease;
+      width: 100%;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .header-actions button.btn {
+      width: auto;
+      padding: 7px 13px;
     }
 
     select:hover, button.btn:hover {
@@ -175,11 +205,12 @@
       font-size: 12px;
       font-weight: 600;
       color: var(--accent-cyan);
-      padding: 7px 11px;
+      padding: 7px 12px;
       border-radius: 8px;
       background: rgba(56, 189, 248, 0.1);
       border: 1px solid rgba(56, 189, 248, 0.25);
       transition: all 0.15s ease;
+      white-space: nowrap;
     }
 
     .tracker-link:hover {
@@ -189,16 +220,16 @@
     /* Main Container */
     .main-container {
       max-width: 1440px;
-      margin: 18px auto 0;
+      margin: 14px auto 0;
       padding: 0 24px;
     }
 
-    /* Navigation Tabs */
+    /* Navigation Tabs — All 5 tabs fit on 1 single line */
     .nav-tabs {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 8px;
-      margin-bottom: 18px;
+      margin-bottom: 16px;
       border-bottom: 1px solid var(--border-subtle);
       padding-bottom: 12px;
     }
@@ -208,13 +239,17 @@
       color: var(--text-secondary);
       border: 1px solid var(--border-subtle);
       border-radius: 10px;
-      padding: 10px 16px;
-      font-size: 13px;
+      padding: 9px 10px;
+      font-size: 12.5px;
       font-weight: 700;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      justify-content: center;
+      gap: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       transition: all 0.15s ease;
     }
 
@@ -555,21 +590,32 @@
   <!-- Top Header -->
   <header class="top-header">
     <div class="header-inner">
-      <div class="brand-group">
-        <div class="brand-icon">⚡</div>
-        <div>
-          <div class="brand-title">
-            <span>Fantasy Fortèball — Lineup Optimizer</span>
-            <span class="brand-badge">Underdog + Sportsbook + 10K Sim</span>
+      <!-- Line 1: Brand Title + Primary Action Buttons -->
+      <div class="header-top-row">
+        <div class="brand-group">
+          <div class="brand-icon">⚡</div>
+          <div>
+            <div class="brand-title">
+              <span>Fantasy Fortèball — Lineup Optimizer</span>
+              <span class="brand-badge">Underdog + Sportsbook + Vegas + 10K Sim</span>
+            </div>
+            <div class="brand-subtitle">
+              <span>Sleeper League <code class="mono">1312258310212165632</code></span>
+              <span>•</span>
+              <span id="statusText">Loading Underdog Fantasy, Sportsbook & CFTC Prediction Market feeds...</span>
+            </div>
           </div>
-          <div class="brand-subtitle">
-            <span>Sleeper League <code class="mono">1312258310212165632</code></span>
-            <span>•</span>
-            <span id="statusText">Loading Underdog Fantasy, Sportsbook & CFTC Prediction Market feeds...</span>
-          </div>
+        </div>
+
+        <div class="header-actions">
+          <button class="btn btn-primary" id="runSimBtn">🎲 Re-Run 10,000 Sims</button>
+          <a class="tracker-link" id="liveTrackerLink" href="http://localhost:3456" target="_blank" rel="noopener">
+            📡 Live Matchup Tracker ↗
+          </a>
         </div>
       </div>
 
+      <!-- Line 2: All 5 Dropdown Controls on One Single Line -->
       <div class="controls-bar">
         <div class="ctrl-group">
           <label class="ctrl-label" for="teamSelect">Target Team</label>
@@ -621,22 +667,10 @@
           <label class="ctrl-label" for="marketWeightSelect">Market Blend Weight</label>
           <select id="marketWeightSelect">
             <option value="0.75" selected>75% Market Props / 25% Sleeper (Optimal)</option>
-            <option value="1.0">100% Pure Market Props</option>
+            <option value="1.0">100% Pure Vegas / Market Props</option>
             <option value="0.5">50% Market / 50% Sleeper</option>
             <option value="0.0">0% Market (Raw Sleeper Only)</option>
           </select>
-        </div>
-
-        <div class="ctrl-group">
-          <label class="ctrl-label">&nbsp;</label>
-          <button class="btn btn-primary" id="runSimBtn">🎲 Re-Run 10,000 Sims</button>
-        </div>
-
-        <div class="ctrl-group">
-          <label class="ctrl-label">&nbsp;</label>
-          <a class="tracker-link" id="liveTrackerLink" href="http://localhost:3456" target="_blank" rel="noopener">
-            📡 Live Matchup Tracker ↗
-          </a>
         </div>
       </div>
     </div>
@@ -644,21 +678,25 @@
 
   <!-- Main Content -->
   <main class="main-container">
-    <!-- Navigation Tabs -->
+    <!-- Line 3: Navigation Tabs on One Single Line -->
     <div class="nav-tabs">
       <button class="tab-btn active" data-tab="optimizer">
-        🎯 Weekly Lineup Optimizer
+        🎯 Weekly Optimizer
         <span class="tab-pill" id="swapCountPill">...</span>
       </button>
       <button class="tab-btn" data-tab="conflicts">
-        🧩 Best K-of-N Conflict Solver (Same-Team & Close Calls)
+        🧩 Best K-of-N Solver
+      </button>
+      <button class="tab-btn" data-tab="vegas">
+        🏟️ Team Vegas View
+        <span class="tab-pill" id="vegasTotalPill">...</span>
       </button>
       <button class="tab-btn" data-tab="backtest">
-        📈 Backtest: Tool vs. Actual Expectations (Weeks 1–7)
-        <span class="tab-pill">+49.7 Pts / +1 Win</span>
+        📈 Backtest (W1–W7)
+        <span class="tab-pill">+49.7 Pts / +1W</span>
       </button>
       <button class="tab-btn" data-tab="props">
-        📊 Underdog & Sportsbook Props Explorer (All Games + IDP)
+        📊 Player Props Explorer
       </button>
     </div>
 
@@ -669,6 +707,10 @@
 
     <div id="tab-conflicts" class="tab-panel" style="display:none;">
       <div class="loading-banner">Initializing Best K-of-N Conflict Solver...</div>
+    </div>
+
+    <div id="tab-vegas" class="tab-panel" style="display:none;">
+      <div class="loading-banner">Loading Entire Team Vegas Projections & League Comparison...</div>
     </div>
 
     <div id="tab-backtest" class="tab-panel" style="display:none;">
@@ -831,10 +873,20 @@
 
         const pill = document.getElementById('swapCountPill');
         const trueSwaps = (optimizerResult.recommendedSwaps || []).filter((s) => s.isTrueAddition || s.isTrueRemoval);
-        pill.textContent = trueSwaps.length > 0 ? `${trueSwaps.length} Recommended Move${trueSwaps.length > 1 ? 's' : ''}` : 'Lineup Optimal';
+        pill.textContent = trueSwaps.length > 0 ? `${trueSwaps.length} Move${trueSwaps.length > 1 ? 's' : ''}` : 'Optimal';
+
+        const vegasPill = document.getElementById('vegasTotalPill');
+        if (vegasPill && optimizerResult.optimalCandidate?.lineup) {
+          const optPureVegas = optimizerResult.optimalCandidate.lineup.reduce(
+            (acc, p) => acc + Number(p.sportsbookProj ?? p.vegasMarketProj ?? p.improvedProj ?? 0),
+            0
+          );
+          vegasPill.textContent = `${fmtNum(optPureVegas, 1)} Pts`;
+        }
 
         renderOptimizerTab();
         renderConflictsTab();
+        renderVegasTeamTab();
         renderPropsTab();
       }
 
@@ -1066,20 +1118,26 @@
             </div>
 
             <div class="card">
-              <div class="card-title"><span>⚖️ Same-Team Skill Pairs (ρ ≤ -0.10)</span></div>
+              <div class="card-title"><span>⚖️ Negative Game-Script & Same-Team Pairs (ρ ≤ -0.10)</span></div>
               <div style="font-size:12px; color:var(--text-secondary);">
                 ${
                   cannibals.length
                     ? cannibals
                         .map(
                           (c) =>
-                            `<div style="padding:4px 0; display:flex; justify-content:space-between;">
-                              <span><b>${c.pA}</b> + <b>${c.pB}</b> (${c.team} TD share split)</span>
-                              <span class="badge badge-amber mono">ρ = ${fmtNum(c.corr, 2)}</span>
+                            `<div style="padding:4px 0; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                              <span>
+                                <b>${c.pA}</b> <span style="color:var(--text-muted);">(${c.teamA || c.team})</span> +
+                                <b>${c.pB}</b> <span style="color:var(--text-muted);">(${c.teamB || c.team})</span>
+                                <span style="color:${c.sameTeam ? '#fbbf24' : 'var(--accent-cyan)'}; font-size:11px; margin-left:4px;">
+                                  (${c.label || (c.sameTeam ? `${c.team} Same-Team TD Split` : `${c.teamA} vs ${c.teamB} Opposing RB Script`)})
+                                </span>
+                              </span>
+                              <span class="badge ${c.sameTeam ? 'badge-amber' : 'badge-cyan'} mono">ρ = ${fmtNum(c.corr, 2)}</span>
                             </div>`
                         )
                         .join('')
-                    : 'Zero same-team RB/WR/TE cannibalization in optimal lineup!'
+                    : 'Zero negative game-script or same-team cannibalization in optimal lineup!'
                 }
               </div>
             </div>
@@ -1184,6 +1242,26 @@
                     })
                     .join('')}
                 </tbody>
+                <tfoot>
+                  ${(() => {
+                    const lu = optimizerResult.optimalCandidate.lineup || [];
+                    const totSlp = lu.reduce((s, p) => s + Number(p.sleeperProj || 0), 0);
+                    const totMkt = lu.reduce((s, p) => s + Number(p.sportsbookProj ?? p.vegasMarketProj ?? p.improvedProj ?? 0), 0);
+                    const totBlended = lu.reduce((s, p) => s + Number(p.improvedProj || 0), 0);
+                    const avgImp = lu.filter((p) => p.teamImpliedPts > 0).reduce((s, p, _, a) => s + Number(p.teamImpliedPts) / a.length, 0);
+                    return `
+                      <tr style="background:rgba(56, 189, 248, 0.10); border-top:2px solid var(--border-accent); font-weight:800;">
+                        <td colspan="4" class="mono" style="color:var(--accent-cyan);">TOTAL 14-STARTER TEAM PROJECTION</td>
+                        <td class="mono" style="font-size:11.5px; color:var(--accent-cyan);">Avg NFL Team Implied: ${fmtNum(avgImp, 1)} pts</td>
+                        <td class="mono" style="font-size:11.5px; color:var(--text-secondary);">Pure Vegas Edge vs Sleeper: <span style="color:#4ade80;">${fmtDelta(totMkt - totSlp, 2, ' pts')}</span></td>
+                        <td class="mono">${fmtNum(totSlp)}</td>
+                        <td class="mono" style="color:var(--accent-teal); font-size:13.5px;">${fmtNum(totMkt)}</td>
+                        <td class="mono" style="color:var(--accent-cyan); font-size:14px;">${fmtNum(totBlended)}</td>
+                        <td class="mono" style="font-size:11.5px; color:var(--text-secondary);">${fmtNum(opt.p10, 1)} – ${fmtNum(opt.p90, 1)}</td>
+                      </tr>
+                    `;
+                  })()}
+                </tfoot>
               </table>
             </div>
           </div>
@@ -1795,6 +1873,456 @@
       }
 
       // =========================================================================
+      // TAB 3: ENTIRE TEAM VEGAS PROJECTION & LEAGUE-WIDE VEGAS VIEW
+      // =========================================================================
+      function renderVegasTeamTab() {
+        const container = document.getElementById('tab-vegas');
+        if (!liveState || !optimizerResult) return;
+
+        const roster = liveState.rostersData.find((r) => r.rosterId === selectedRosterId) || liveState.rostersData[0];
+        const oppRoster = liveState.rostersData.find((r) => r.rosterId === optimizerResult.oppRosterId) || roster;
+
+        const sumPureVegas = (players) =>
+          (players || []).reduce((acc, p) => acc + Number(p.sportsbookProj ?? p.vegasMarketProj ?? p.improvedProj ?? 0), 0);
+        const sumBlended = (players) =>
+          (players || []).reduce((acc, p) => acc + Number(p.improvedProj ?? 0), 0);
+        const sumSleeper = (players) =>
+          (players || []).reduce((acc, p) => acc + Number(p.sleeperProj ?? 0), 0);
+        const avgImplied = (players) => {
+          const valid = (players || []).filter((p) => Number(p.teamImpliedPts) > 0);
+          return valid.length ? valid.reduce((a, p) => a + Number(p.teamImpliedPts), 0) / valid.length : 0;
+        };
+
+        const optLineup = optimizerResult.optimalCandidate?.lineup || roster.rawStarters || [];
+        const currLineup = roster.rawStarters || [];
+        const oppLineup = oppRoster.rawStarters || [];
+
+        const optPureVegas = sumPureVegas(optLineup);
+        const currPureVegas = sumPureVegas(currLineup);
+        const optBlended = sumBlended(optLineup);
+        const currBlended = sumBlended(currLineup);
+        const optSleeper = sumSleeper(optLineup);
+        const currSleeper = sumSleeper(currLineup);
+
+        const oppPureVegas = sumPureVegas(oppLineup);
+        const oppBlended = sumBlended(oppLineup);
+        const oppSleeper = sumSleeper(oppLineup);
+
+        const optAvgImp = avgImplied(optLineup);
+        const highTotalCount = optLineup.filter((p) => Number(p.vegasTotal) >= 46.5).length;
+        const favoredCount = optLineup.filter((p) => Number(p.teamWinProb) >= 0.55).length;
+
+        // Compute League-Wide 10-Team Vegas Projection Table
+        const leagueVegasRows = [...liveState.rostersData]
+          .map((r) => {
+            const st = r.rawStarters || [];
+            const bn = r.rawBench || [];
+            const pureVegasSt = sumPureVegas(st);
+            const blendedSt = sumBlended(st);
+            const sleeperSt = sumSleeper(st);
+            const pureVegasBench = sumPureVegas(bn);
+            const avgImp = avgImplied(st);
+            return {
+              ...r,
+              pureVegasSt,
+              blendedSt,
+              sleeperSt,
+              pureVegasBench,
+              vegasEdgeVsSleeper: pureVegasSt - sleeperSt,
+              avgImp
+            };
+          })
+          .sort((a, b) => b.pureVegasSt - a.pureVegasSt);
+
+        // Collect all NFL games from the week's rosters & Vegas lines
+        const allRosterPlayers = [...(roster.rawStarters || []), ...(roster.rawBench || [])].filter((p) => p && p.playerId !== '0');
+        const currentStarterIds = new Set((roster.rawStarters || []).map((p) => p.playerId));
+        const optStarterIds = new Set(optLineup.map((p) => p.playerId));
+
+        // Build NFL Slate Game Cards with Roster Exposure
+        const gameMap = new Map();
+        for (const r of liveState.rostersData) {
+          for (const p of [...(r.rawStarters || []), ...(r.rawBench || [])]) {
+            if (!p || !p.team || !p.opponent || p.team === 'FA') continue;
+            const away = p.isHome ? p.opponent : p.team;
+            const home = p.isHome ? p.team : p.opponent;
+            const key = `${away}@${home}`;
+            if (!gameMap.has(key)) {
+              const awayImp = p.isHome ? Number(p.vegasTotal || 44) - Number(p.teamImpliedPts || 22) : Number(p.teamImpliedPts || 22);
+              const homeImp = p.isHome ? Number(p.teamImpliedPts || 22) : Number(p.vegasTotal || 44) - Number(p.teamImpliedPts || 22);
+              const homeSpread = +(awayImp - homeImp).toFixed(1);
+              const homeWinProb = p.isHome ? Number(p.teamWinProb || 0.5) : 1 - Number(p.teamWinProb || 0.5);
+              gameMap.set(key, {
+                key,
+                away,
+                home,
+                total: Number(p.vegasTotal || 44.0),
+                homeSpread,
+                awayImp: +awayImp.toFixed(1),
+                homeImp: +homeImp.toFixed(1),
+                homeWinProb,
+                awayWinProb: 1 - homeWinProb,
+                myPlayers: []
+              });
+            }
+          }
+        }
+        for (const p of allRosterPlayers) {
+          if (!p.team || !p.opponent) continue;
+          const away = p.isHome ? p.opponent : p.team;
+          const home = p.isHome ? p.team : p.opponent;
+          const g = gameMap.get(`${away}@${home}`);
+          if (g && !g.myPlayers.some((x) => x.playerId === p.playerId)) {
+            g.myPlayers.push(p);
+          }
+        }
+        const nflGames = [...gameMap.values()].sort((a, b) => b.total - a.total);
+
+        container.innerHTML = `
+          <!-- 4 Executive KPI Cards: Entire Team Vegas Projection -->
+          <div class="grid-4">
+            <!-- Card 1: Pure Vegas / Market Team Total -->
+            <div class="card card-highlight">
+              <div class="card-title">
+                <span>1. Pure Vegas / Market Total</span>
+                <span class="badge badge-green">100% Market Props</span>
+              </div>
+              <div class="metric-big mono" style="color:#4ade80;">
+                ${fmtNum(optPureVegas, 2)} <span style="font-size:13px; color:var(--text-secondary);">Optimal 14 Starters</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                Current Set Lineup Vegas Total: <b>${fmtNum(currPureVegas, 2)} pts</b> (${fmtDelta(optPureVegas - currPureVegas, 2, ' opt gain')})
+              </div>
+              <div class="metric-row">
+                <span>Blended Team Proj (${Math.round(selectedMarketWeight * 100)}% Mkt)</span>
+                <span class="mono" style="font-weight:700; color:var(--accent-cyan);">${fmtNum(optBlended, 2)} pts</span>
+              </div>
+              <div class="metric-row">
+                <span>Raw Sleeper Team Proj</span>
+                <span class="mono">${fmtNum(optSleeper, 2)} pts</span>
+              </div>
+            </div>
+
+            <!-- Card 2: Vegas vs. Sleeper Team Discrepancy -->
+            <div class="card">
+              <div class="card-title">
+                <span>2. Vegas vs. Sleeper Team Edge</span>
+                <span class="badge ${optPureVegas - optSleeper >= 0 ? 'badge-cyan' : 'badge-amber'}">${fmtDelta(optPureVegas - optSleeper, 2, ' Pts')}</span>
+              </div>
+              <div class="metric-big mono" style="color:var(--accent-cyan);">
+                ${fmtDelta(optPureVegas - optSleeper, 2)} <span style="font-size:13px; color:var(--text-secondary);">Market vs Sleeper</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                Sum of Underdog Fantasy + Sportsbook + Vegas Props vs. Sleeper Static
+              </div>
+              <div class="metric-row">
+                <span>Team 80% Sim Range (p10–p90)</span>
+                <span class="mono">${fmtNum(optimizerResult.optimalCandidate.metrics.p10, 1)} – ${fmtNum(optimizerResult.optimalCandidate.metrics.p90, 1)}</span>
+              </div>
+              <div class="metric-row">
+                <span>Bench Total Vegas Projection</span>
+                <span class="mono">${fmtNum(sumPureVegas(roster.rawBench), 2)} pts</span>
+              </div>
+            </div>
+
+            <!-- Card 3: Head-to-Head Matchup Vegas Spread -->
+            <div class="card">
+              <div class="card-title">
+                <span>3. Matchup Vegas Projection</span>
+                <span class="badge ${optPureVegas >= oppPureVegas ? 'badge-green' : 'badge-red'}">
+                  Spread: ${fmtDelta(optPureVegas - oppPureVegas, 2, ' Pts')}
+                </span>
+              </div>
+              <div class="metric-big mono">
+                ${fmtNum(optPureVegas, 1)} <span style="font-size:14px; color:var(--text-muted);">vs</span> ${fmtNum(oppPureVegas, 1)}
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                vs. <b>${oppRoster.teamName}</b> (Blended: ${fmtNum(oppBlended, 1)} • Sleeper: ${fmtNum(oppSleeper, 1)})
+              </div>
+              <div class="metric-row">
+                <span>Simulated H2H Win Probability</span>
+                <span class="mono" style="color:#4ade80; font-weight:700;">${fmtPct(optimizerResult.optimalCandidate.metrics.h2hWinProb)}</span>
+              </div>
+              <div class="metric-row">
+                <span>Top-5 League Median Win Prob</span>
+                <span class="mono" style="color:var(--accent-cyan); font-weight:700;">${fmtPct(optimizerResult.optimalCandidate.metrics.medianWinProb)}</span>
+              </div>
+            </div>
+
+            <!-- Card 4: NFL Vegas Game Environment Exposure -->
+            <div class="card">
+              <div class="card-title">
+                <span>4. NFL Vegas Implied Exposure</span>
+                <span class="badge badge-purple">${fmtNum(optAvgImp, 1)} Avg Implied Pts</span>
+              </div>
+              <div class="metric-big mono" style="color:#c084fc;">
+                ${fmtNum(optAvgImp, 1)} <span style="font-size:13px; color:var(--text-secondary);">NFL Team Pts / Starter</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                Average Vegas Implied Team Total across your 14 starters
+              </div>
+              <div class="metric-row">
+                <span>Starters in Shootout Games (O/U ≥ 46.5)</span>
+                <span class="mono" style="font-weight:700;">${highTotalCount} of 14 starters</span>
+              </div>
+              <div class="metric-row">
+                <span>Starters on Vegas Favored Teams</span>
+                <span class="mono" style="font-weight:700;">${favoredCount} of 14 starters</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 1: Selected Team's Entire Roster Vegas Projection Table (14 Starters + Bench) -->
+          <div class="card" style="margin-bottom:18px;">
+            <div class="card-title">
+              <span>📋 ${roster.teamName} — Entire Team Vegas & Prediction Market Projection Breakdown (14 Optimal Starters + Bench)</span>
+              <span class="badge badge-cyan">Pure Vegas Total: ${fmtNum(optPureVegas, 2)} Pts • Blended: ${fmtNum(optBlended, 2)} Pts • Sleeper: ${fmtNum(optSleeper, 2)} Pts</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Lineup Status</th>
+                    <th>Slot</th>
+                    <th>Player</th>
+                    <th>NFL Game & Vegas O/U</th>
+                    <th>NFL Team Implied Pts</th>
+                    <th>CFTC Team Win %</th>
+                    <th>Underdog Proj</th>
+                    <th>OWS Sportsbook Proj</th>
+                    <th>Vegas Game-Script Proj</th>
+                    <th>Pure Market / Vegas Proj</th>
+                    <th>Blended Proj</th>
+                    <th>Sleeper Proj</th>
+                    <th>Vegas vs Sleeper</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${[
+                    ...optLineup.map((p) => ({ ...p, _isOptStarter: true })),
+                    ...allRosterPlayers.filter((p) => !optStarterIds.has(p.playerId)).map((p) => ({ ...p, _isOptStarter: false }))
+                  ]
+                    .map((p) => {
+                      const pureMkt = Number(p.sportsbookProj ?? p.vegasMarketProj ?? p.improvedProj ?? 0);
+                      const edge = pureMkt - Number(p.sleeperProj || 0);
+                      const wasCurrentStarter = currentStarterIds.has(p.playerId);
+                      let statusBadge = '';
+                      if (p._isOptStarter && !wasCurrentStarter) {
+                        statusBadge = '<span class="badge badge-green">★ OPTIMAL START (SWAP IN)</span>';
+                      } else if (p._isOptStarter) {
+                        statusBadge = '<span class="badge badge-cyan">✓ OPTIMAL STARTER</span>';
+                      } else if (wasCurrentStarter) {
+                        statusBadge = '<span class="badge badge-amber">↓ BENCH IN OPTIMAL</span>';
+                      } else {
+                        statusBadge = '<span class="badge" style="background:rgba(148,163,184,0.1);color:var(--text-muted);">BENCH</span>';
+                      }
+                      return `
+                        <tr class="${p._isOptStarter && !wasCurrentStarter ? 'row-swap' : ''}" style="${!p._isOptStarter ? 'opacity:0.78;' : ''}">
+                          <td>${statusBadge}</td>
+                          <td><span class="pos-pill pos-${p.slot}">${p.slot}</span></td>
+                          <td>
+                            <div style="font-weight:700;">${p.fullName}</div>
+                            <div style="font-size:11px; color:var(--text-muted);">${p.team} • ${p.position}</div>
+                          </td>
+                          <td class="mono" style="font-size:11.5px;">
+                            ${p.opponent ? `<b>${p.team}</b> ${p.isHome ? 'vs' : '@'} ${p.opponent} <span style="color:var(--text-muted);">(O/U ${fmtNum(p.vegasTotal, 1)})</span>` : 'BYE'}
+                          </td>
+                          <td class="mono" style="color:var(--accent-cyan); font-weight:700;">
+                            ${p.teamImpliedPts ? `${fmtNum(p.teamImpliedPts, 1)} pts` : '—'}
+                          </td>
+                          <td class="mono" style="font-size:11.5px;">
+                            ${p.teamWinProb ? fmtPct(p.teamWinProb) : '—'}
+                          </td>
+                          <td class="mono" style="color:#4ade80; font-weight:700;">
+                            ${p.underdogProj !== null && p.underdogProj !== undefined ? fmtNum(p.underdogProj) : '—'}
+                          </td>
+                          <td class="mono" style="color:var(--accent-teal);">
+                            ${p.owsSportsbookProj !== null && p.owsSportsbookProj !== undefined ? fmtNum(p.owsSportsbookProj) : '—'}
+                          </td>
+                          <td class="mono" style="color:#c084fc;">
+                            ${p.vegasMarketProj !== null && p.vegasMarketProj !== undefined ? fmtNum(p.vegasMarketProj) : '—'}
+                          </td>
+                          <td class="mono" style="font-weight:800; color:#4ade80; font-size:13.5px;">
+                            ${fmtNum(pureMkt)}
+                          </td>
+                          <td class="mono" style="font-weight:800; color:var(--accent-cyan); font-size:13.5px;">
+                            ${fmtNum(p.improvedProj)}
+                          </td>
+                          <td class="mono">${fmtNum(p.sleeperProj)}</td>
+                          <td class="mono">
+                            <span class="badge ${edge >= 0 ? 'badge-green' : 'badge-amber'}">${fmtDelta(edge, 2)}</span>
+                          </td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+                <tfoot>
+                  <tr style="background:rgba(34, 197, 94, 0.12); border-top:2px solid rgba(34, 197, 94, 0.45); font-weight:800;">
+                    <td colspan="4" class="mono" style="color:#4ade80;">TOTAL OPTIMAL 14-STARTER VEGAS PROJECTION</td>
+                    <td class="mono" style="color:var(--accent-cyan);">${fmtNum(optAvgImp, 1)} avg</td>
+                    <td class="mono">—</td>
+                    <td class="mono" style="color:#4ade80;">${fmtNum(optLineup.reduce((s, p) => s + Number(p.underdogProj ?? p.sportsbookProj ?? 0), 0))}</td>
+                    <td class="mono" style="color:var(--accent-teal);">—</td>
+                    <td class="mono" style="color:#c084fc;">${fmtNum(optLineup.reduce((s, p) => s + Number(p.vegasMarketProj ?? p.improvedProj ?? 0), 0))}</td>
+                    <td class="mono" style="color:#4ade80; font-size:14px;">${fmtNum(optPureVegas)}</td>
+                    <td class="mono" style="color:var(--accent-cyan); font-size:14px;">${fmtNum(optBlended)}</td>
+                    <td class="mono">${fmtNum(optSleeper)}</td>
+                    <td class="mono"><span class="badge badge-green">${fmtDelta(optPureVegas - optSleeper, 2, ' pts')}</span></td>
+                  </tr>
+                  <tr style="background:rgba(56, 189, 248, 0.08); font-weight:700;">
+                    <td colspan="4" class="mono" style="color:var(--text-secondary);">CURRENT MANAGER-SET 14-STARTER PROJECTION</td>
+                    <td class="mono" style="color:var(--text-secondary);">${fmtNum(avgImplied(currLineup), 1)} avg</td>
+                    <td class="mono">—</td>
+                    <td class="mono" colspan="3" style="color:var(--text-muted);">Current Set Lineup Baseline</td>
+                    <td class="mono" style="color:#fbbf24;">${fmtNum(currPureVegas)}</td>
+                    <td class="mono" style="color:var(--accent-cyan);">${fmtNum(currBlended)}</td>
+                    <td class="mono">${fmtNum(currSleeper)}</td>
+                    <td class="mono"><span class="badge badge-cyan">${fmtDelta(currPureVegas - currSleeper, 2, ' pts')}</span></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 2: All 10 Fantasy Teams — Entire League Vegas Projection Leaderboard -->
+          <div class="card" style="margin-bottom:18px;">
+            <div class="card-title">
+              <span>🏟️ All 10 Fantasy Teams — Week ${liveState.league.week} Entire Team Vegas Projection Leaderboard</span>
+              <span class="badge badge-green">Click Any Team to Inspect Their Full Vegas Lineup</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Vegas Rank</th>
+                    <th>Fantasy Team</th>
+                    <th>Pure Vegas / Market Total (100%)</th>
+                    <th>Blended Team Proj</th>
+                    <th>Raw Sleeper Proj</th>
+                    <th>Vegas vs. Sleeper Edge</th>
+                    <th>Bench Vegas Total</th>
+                    <th>Avg NFL Team Implied Pts</th>
+                    <th>80% Sim Range (p10–p90)</th>
+                    <th>H2H Win %</th>
+                    <th>Top-5 Median %</th>
+                    <th>Expected Wins</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${leagueVegasRows
+                    .map((r, idx) => {
+                      const isTarget = r.rosterId === selectedRosterId;
+                      return `
+                        <tr class="${isTarget ? 'row-swap' : ''}">
+                          <td class="mono" style="font-weight:800;">#${idx + 1}</td>
+                          <td>
+                            <div style="font-weight:700;">
+                              ${r.teamName}
+                              ${isTarget ? '<span class="badge badge-cyan" style="margin-left:4px;">SELECTED</span>' : ''}
+                            </div>
+                            <div style="font-size:11px; color:var(--text-muted);">@${r.ownerName} (${r.wins}-${r.losses})</div>
+                          </td>
+                          <td class="mono" style="font-weight:800; color:#4ade80; font-size:14px;">${fmtNum(r.pureVegasSt, 2)}</td>
+                          <td class="mono" style="font-weight:700; color:var(--accent-cyan);">${fmtNum(r.blendedSt, 2)}</td>
+                          <td class="mono">${fmtNum(r.sleeperSt, 2)}</td>
+                          <td class="mono">
+                            <span class="badge ${r.vegasEdgeVsSleeper >= 0 ? 'badge-green' : 'badge-amber'}">${fmtDelta(r.vegasEdgeVsSleeper, 2, ' pts')}</span>
+                          </td>
+                          <td class="mono" style="color:var(--text-secondary);">${fmtNum(r.pureVegasBench, 1)}</td>
+                          <td class="mono" style="color:#c084fc; font-weight:700;">${fmtNum(r.avgImp, 1)} pts</td>
+                          <td class="mono" style="font-size:11.5px;">${fmtNum(r.simP10, 1)} – ${fmtNum(r.simP90, 1)}</td>
+                          <td class="mono" style="font-weight:700;">${fmtPct(r.h2hWinProb)}</td>
+                          <td class="mono" style="font-weight:700;">${fmtPct(r.medianWinProb)}</td>
+                          <td class="mono" style="font-weight:800; color:#4ade80;">${fmtNum(r.expectedWeeklyWins, 2)} W</td>
+                          <td>
+                            <button class="btn ${isTarget ? 'btn-primary' : ''}" data-inspect-roster="${r.rosterId}" style="padding:4px 10px; font-size:11px;">
+                              ${isTarget ? 'Viewing' : 'Inspect Team'}
+                            </button>
+                          </td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Section 3: NFL Game-by-Game Vegas Implied Totals, Spreads, CFTC Win % & Roster Exposure -->
+          <div class="card">
+            <div class="card-title">
+              <span>🏈 NFL Week ${liveState.league.week} Vegas Game Environment Slate — Implied Team Totals, Spreads & ${roster.teamName} Exposure</span>
+              <span class="badge badge-purple">Sorted by Vegas Over/Under Game Total</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>NFL Matchup</th>
+                    <th>Vegas Over/Under</th>
+                    <th>Spread</th>
+                    <th>Away Implied Total</th>
+                    <th>Home Implied Total</th>
+                    <th>CFTC Win Prob (Away / Home)</th>
+                    <th>${roster.teamName} Players in This Game</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${nflGames
+                    .map((g) => {
+                      const spreadStr = g.homeSpread === 0 ? 'PK' : g.homeSpread < 0 ? `${g.home} ${g.homeSpread}` : `${g.away} -${g.homeSpread}`;
+                      const playersHtml = g.myPlayers.length
+                        ? g.myPlayers
+                            .map((p) => {
+                              const isSt = optStarterIds.has(p.playerId);
+                              return `<span class="badge ${isSt ? 'badge-green' : ''}" style="${!isSt ? 'background:rgba(148,163,184,0.12);color:var(--text-secondary);' : ''} margin-right:5px;">
+                                ${p.shortName} (${p.team} ${p.position} • ${fmtNum(p.sportsbookProj ?? p.improvedProj, 1)})
+                              </span>`;
+                            })
+                            .join('')
+                        : '<span style="color:var(--text-muted); font-size:11.5px;">No roster exposure</span>';
+                      return `
+                        <tr class="${g.myPlayers.length > 0 ? 'row-swap' : ''}">
+                          <td style="font-weight:800;">${g.away} @ ${g.home}</td>
+                          <td class="mono">
+                            <span class="badge ${g.total >= 47 ? 'badge-green' : g.total <= 40 ? 'badge-amber' : 'badge-cyan'}">
+                              O/U ${fmtNum(g.total, 1)}
+                            </span>
+                          </td>
+                          <td class="mono" style="font-weight:700;">${spreadStr}</td>
+                          <td class="mono" style="color:${g.awayImp >= 24 ? '#4ade80' : 'var(--text-primary)'}; font-weight:700;">
+                            ${g.away}: ${fmtNum(g.awayImp, 1)} pts
+                          </td>
+                          <td class="mono" style="color:${g.homeImp >= 24 ? '#4ade80' : 'var(--text-primary)'}; font-weight:700;">
+                            ${g.home}: ${fmtNum(g.homeImp, 1)} pts
+                          </td>
+                          <td class="mono" style="font-size:11.5px;">
+                            ${g.away} ${fmtPct(g.awayWinProb)} / ${g.home} ${fmtPct(g.homeWinProb)}
+                          </td>
+                          <td>${playersHtml}</td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        container.querySelectorAll('[data-inspect-roster]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            selectedRosterId = Number(btn.getAttribute('data-inspect-roster'));
+            document.getElementById('teamSelect').value = String(selectedRosterId);
+            conflictSelectedIds = [];
+            recomputeOptimizer();
+          });
+        });
+      }
+
+      // =========================================================================
       // TAB 4: UNDERDOG & SPORTSBOOK PROPS & VEGAS GAME ENVIRONMENT EXPLORER
       // =========================================================================
       function renderPropsTab() {
@@ -1875,6 +2403,26 @@
                     })
                     .join('')}
                 </tbody>
+                <tfoot>
+                  ${(() => {
+                    const lu = optimizerResult?.optimalCandidate?.lineup || [];
+                    const totSlp = lu.reduce((s, p) => s + Number(p.sleeperProj || 0), 0);
+                    const totMkt = lu.reduce((s, p) => s + Number(p.sportsbookProj ?? p.vegasMarketProj ?? p.improvedProj ?? 0), 0);
+                    const totBlended = lu.reduce((s, p) => s + Number(p.improvedProj || 0), 0);
+                    const avgImp = lu.filter((p) => p.teamImpliedPts > 0).reduce((s, p, _, a) => s + Number(p.teamImpliedPts) / a.length, 0);
+                    return `
+                      <tr style="background:rgba(56, 189, 248, 0.10); border-top:2px solid var(--border-accent); font-weight:800;">
+                        <td colspan="4" class="mono" style="color:var(--accent-cyan);">TOTAL OPTIMAL 14-STARTER PROJECTION</td>
+                        <td class="mono" style="color:var(--accent-cyan);">${fmtNum(avgImp, 1)} avg</td>
+                        <td colspan="4" class="mono" style="font-size:11.5px; color:var(--text-secondary);">Pure Vegas Edge vs Sleeper: <span style="color:#4ade80;">${fmtDelta(totMkt - totSlp, 2, ' pts')}</span></td>
+                        <td class="mono">${fmtNum(totSlp)}</td>
+                        <td class="mono" style="color:#4ade80;">${fmtNum(totMkt)}</td>
+                        <td class="mono" style="color:var(--accent-teal);">—</td>
+                        <td class="mono" style="color:var(--accent-cyan); font-size:14px;">${fmtNum(totBlended)}</td>
+                      </tr>
+                    `;
+                  })()}
+                </tfoot>
               </table>
             </div>
           </div>

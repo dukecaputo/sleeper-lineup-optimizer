@@ -2054,7 +2054,7 @@
 
       const pool = slotPools[slotIdx];
       if (!pool || pool.length === 0) {
-        const fallback = { playerId: '0', fullName: 'Empty Slot', slot: slots[slotIdx], currentPts: 0, improvedProj: 0, sleeperProj: 0 };
+        const fallback = { playerId: '0', fullName: 'Empty Slot', shortName: 'Empty', team: 'FA', position: slots[slotIdx], slot: slots[slotIdx], currentPts: 0, improvedProj: 0, sleeperProj: 0, sportsbookProj: 0, underdogProj: null, owsSportsbookProj: null, vegasMarketProj: 0, floor: 0, ceiling: 0 };
         currentAssignment[slotIdx] = fallback;
         searchLineups(slotIdx + 1, runningProj);
         return;
@@ -2071,7 +2071,7 @@
         usedInSearch.delete(cand.playerId);
       }
       if (!triedAny) {
-        const fallback = { playerId: '0', fullName: 'Empty Slot', slot: slots[slotIdx], currentPts: 0, improvedProj: 0, sleeperProj: 0 };
+        const fallback = { playerId: '0', fullName: 'Empty Slot', shortName: 'Empty', team: 'FA', position: slots[slotIdx], slot: slots[slotIdx], currentPts: 0, improvedProj: 0, sleeperProj: 0, sportsbookProj: 0, underdogProj: null, owsSportsbookProj: null, vegasMarketProj: 0, floor: 0, ceiling: 0 };
         currentAssignment[slotIdx] = fallback;
         searchLineups(slotIdx + 1, runningProj);
       }
@@ -2098,10 +2098,28 @@
           const pB = lineup[j];
           if (!pB || pB.playerId === '0') continue;
           const c = computePairwisePlayerCorrelation(pA, pB);
+          const sameTeam = pA.team === pB.team;
           if (c >= 0.12) {
-            stackPairs.push({ pA: pA.shortName, pB: pB.shortName, teamA: pA.team, teamB: pB.team, corr: c });
+            stackPairs.push({
+              pA: pA.shortName,
+              pB: pB.shortName,
+              teamA: pA.team,
+              teamB: pB.team,
+              sameTeam,
+              label: sameTeam ? `${pA.team} Teammate Stack` : `${pA.team}/${pB.team} Game Shootout`,
+              corr: c
+            });
           } else if (c <= -0.10) {
-            cannibalPairs.push({ pA: pA.shortName, pB: pB.shortName, team: pA.team, corr: c });
+            cannibalPairs.push({
+              pA: pA.shortName,
+              pB: pB.shortName,
+              team: pA.team,
+              teamA: pA.team,
+              teamB: pB.team,
+              sameTeam,
+              label: sameTeam ? `${pA.team} Same-Team TD Split` : `${pA.team} vs ${pB.team} Opposing RB Script`,
+              corr: c
+            });
           }
         }
         if (oppRoster) {
@@ -2192,7 +2210,7 @@
 
       if (bestMatchScore >= 0) {
         return slots.map((slotName, idx) =>
-          bestSlotAssign[idx] || { playerId: '0', fullName: 'Empty Slot', shortName: 'Empty', team: 'FA', position: slotName, slot: slotName, currentPts: 0, improvedProj: 0, sleeperProj: 0 }
+          bestSlotAssign[idx] || { playerId: '0', fullName: 'Empty Slot', shortName: 'Empty', team: 'FA', position: slotName, slot: slotName, currentPts: 0, improvedProj: 0, sleeperProj: 0, sportsbookProj: 0, underdogProj: null, owsSportsbookProj: null, vegasMarketProj: 0, floor: 0, ceiling: 0 }
         );
       }
       return optLineup;
@@ -2225,7 +2243,7 @@
           reasons.push(`+${projDelta.toFixed(2)} blended market projection edge`);
         }
         if (optP.sportsbookProj && optP.sportsbookProj > optP.sleeperProj + 0.4) {
-          reasons.push(`Sportsbook props (${optP.sportsbookProj.toFixed(1)}) bullish vs Sleeper (${optP.sleeperProj.toFixed(1)})`);
+          reasons.push(`Market props (${optP.sportsbookProj.toFixed(1)}) bullish vs Sleeper (${optP.sleeperProj.toFixed(1)})`);
         }
         // Check if optP stacks with another optimal starter
         for (const otherP of optimalCandidate.lineup) {
@@ -2235,13 +2253,17 @@
             reasons.push(`Positive correlation stack with ${otherP.shortName} (ρ = +${c.toFixed(2)})`);
           }
         }
-        // Check if currP had negative cannibalization with another optimal starter
+        // Check if currP had negative cannibalization or opposing RB script conflict with another optimal starter
         if (currP && currId !== '0') {
           for (const otherP of optimalCandidate.lineup) {
             if (!otherP || otherP.playerId === '0' || otherP.playerId === optP.playerId) continue;
             const cOld = computePairwisePlayerCorrelation(currP, otherP);
             if (cOld <= -0.10) {
-              reasons.push(`Avoids ${currP.team} same-team cannibalization with ${otherP.shortName} (ρ = ${cOld.toFixed(2)})`);
+              if (currP.team === otherP.team) {
+                reasons.push(`Avoids ${currP.team} same-team cannibalization with ${otherP.shortName} (ρ = ${cOld.toFixed(2)})`);
+              } else {
+                reasons.push(`Avoids ${currP.team}/${otherP.team} opposing RB game-script conflict with ${otherP.shortName} (ρ = ${cOld.toFixed(2)})`);
+              }
             }
           }
         }
