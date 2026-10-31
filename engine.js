@@ -17,6 +17,7 @@
   'use strict';
 
   const DEFAULT_LEAGUE_ID = '1312258310212165632';
+  const UNDERDOG_NFL_URL = 'https://api.underdogfantasy.com/v1/over_under_lines?sport_id=NFL';
   const OWS_SPORTSBOOK_URL = 'https://oneweekseason.com/wp-json/ows-stacks/v1/sportsbook-feed';
   const ESPN_SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard';
   const cache = new Map();
@@ -56,9 +57,9 @@
   }
 
   function normalizePlayerName(name) {
-    return (name || '')
+    return String(name || '')
       .toLowerCase()
-      .replace(/\s+(jr\.?|sr\.?|iii|ii|iv|v)$/i, '')
+      .replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/gi, '')
       .replace(/[^a-z0-9]/g, '');
   }
 
@@ -83,8 +84,390 @@
     return total;
   }
 
+  // Mathematical helpers for Underdog Fantasy de-vigging, Normal quantile shift & Poisson inversion
+  function americanToRawProb(amStr) {
+    if (amStr === null || amStr === undefined) return null;
+    const val = parseFloat(String(amStr).trim().replace('+', ''));
+    if (Number.isNaN(val)) return null;
+    if (val < 0) return (-val) / (-val + 100.0);
+    if (val > 0) return 100.0 / (val + 100.0);
+    return 0.5;
+  }
+
+  function erfApprox(x) {
+    const sign = x >= 0 ? 1 : -1;
+    const ax = Math.abs(x);
+    const t = 1.0 / (1.0 + 0.3275911 * ax);
+    const y = 1.0 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-ax * ax);
+    return sign * y;
+  }
+
+  function invNormCdf(p) {
+    const pClamped = Math.max(0.01, Math.min(0.99, Number(p || 0.5)));
+    let lo = -3.5;
+    let hi = 3.5;
+    const sqrt2 = Math.SQRT2;
+    for (let i = 0; i < 24; i++) {
+      const mid = 0.5 * (lo + hi);
+      const cdf = 0.5 * (1.0 + erfApprox(mid / sqrt2));
+      if (cdf < pClamped) lo = mid;
+      else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+  }
+
+  function poissonOverProb(lam, k) {
+    const n = Math.floor(k);
+    let s = 0.0;
+    let term = Math.exp(-lam);
+    for (let i = 0; i <= n; i++) {
+      if (i > 0) term *= lam / i;
+      s += term;
+    }
+    return Math.max(0.0, Math.min(1.0, 1.0 - s));
+  }
+
+  function invertPoissonMean(lineVal, pOver) {
+    const pClamped = Math.max(0.01, Math.min(0.98, Number(pOver || 0.5)));
+    if (lineVal < 1.0) {
+      return -Math.log(Math.max(1e-4, 1.0 - pClamped));
+    }
+    let lo = 0.05;
+    let hi = 16.0;
+    for (let i = 0; i < 26; i++) {
+      const mid = 0.5 * (lo + hi);
+      if (poissonOverProb(mid, lineVal) < pClamped) lo = mid;
+      else hi = mid;
+    }
+    return 0.5 * (lo + hi);
+  }
+
+  function extractUnderdogDevigProb(optMap) {
+    const hi = optMap.higher || {};
+    const lo = optMap.lower || {};
+    const pHi = americanToRawProb(hi.american_price);
+    const pLo = americanToRawProb(lo.american_price);
+    if (pHi !== null && pLo !== null && (pHi + pLo) > 0) {
+      return Math.max(0.02, Math.min(0.98, pHi / (pHi + pLo)));
+    }
+    if (pHi !== null) {
+      return Math.max(0.02, Math.min(0.92, pHi * 0.935));
+    }
+    const mHi = parseFloat(hi.payout_multiplier);
+    const mLo = parseFloat(lo.payout_multiplier);
+    if (!Number.isNaN(mHi) && !Number.isNaN(mLo) && mHi > 0 && mLo > 0) {
+      const invH = 1.0 / mHi;
+      const invL = 1.0 / mLo;
+      return Math.max(0.02, Math.min(0.98, invH / (invH + invL)));
+    }
+    if (!Number.isNaN(mHi) && mHi > 0) {
+      return Math.max(0.02, Math.min(0.92, 0.50 / mHi));
+    }
+    return 0.50;
+  }
+
   /**
-   * Convert Sportsbook Player Prop Lines (py, ptd, int, ry, rec, recy, td)
+   * Fetch & parse Underdog Fantasy's live NFL Over/Under feed (`api.underdogfantasy.com/v1/over_under_lines?sport_id=NFL`).
+   * Covers ALL NFL games in the week (TNF, Sunday 1pm, Sunday 4pm, SNF, MNF) and both Offense + IDP players!
+   */
+  async function fetchUnderdogNflMap(ttlMs = 180000) {
+    const cacheKey = 'PROCESSED_UNDERDOG_NFL_MAP';
+    const now = Date.now();
+    if (ttlMs > 0 && cache.has(cacheKey)) {
+      const c = cache.get(cacheKey);
+      if (now - c.ts < ttlMs) return c.data;
+    }
+    let payload = null;
+    try {
+      payload = await fetchJson(UNDERDOG_NFL_URL, {}, ttlMs);
+    } catch (_) {
+      try {
+        payload = await fetchJson('./underdog_nfl_props.json', {}, ttlMs);
+      } catch (__) {
+        payload = null;
+      }
+    }
+    if (!payload) return new Map();
+
+    // If payload is already compacted (`players_by_norm`), convert directly
+    const byNorm = new Map();
+    if (payload.players_by_norm) {
+      for (const [normKey, entry] of Object.entries(payload.players_by_norm)) {
+        byNorm.set(normKey, entry);
+      }
+      cache.set(cacheKey, { ts: now, data: byNorm });
+      return byNorm;
+    }
+
+    const udPlayers = {};
+    for (const p of (payload.players || [])) {
+      if (p.sport_id !== 'NFL') continue;
+      const fullName = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+      if (!fullName) continue;
+      udPlayers[String(p.id)] = {
+        name: fullName,
+        norm: normalizePlayerName(fullName),
+        pos: String(p.position_name || '')
+      };
+    }
+
+    const appearances = {};
+    for (const a of (payload.appearances || [])) {
+      const pid = String(a.player_id || '');
+      if (udPlayers[pid]) {
+        appearances[String(a.id)] = {
+          playerId: pid,
+          matchId: a.match_id
+        };
+      }
+    }
+
+    for (const l of (payload.over_under_lines || [])) {
+      if (l.status !== 'active') continue;
+      const ou = l.over_under || {};
+      const astat = ou.appearance_stat || {};
+      const stat = String(astat.stat || '');
+      if (!stat || stat.startsWith('period_')) continue;
+      const app = appearances[String(astat.appearance_id || '')];
+      if (!app) continue;
+      const pinfo = udPlayers[app.playerId];
+      if (!pinfo) continue;
+      const statVal = parseFloat(l.stat_value);
+      if (Number.isNaN(statVal)) continue;
+
+      const optMap = {};
+      for (const o of (l.options || [])) {
+        if (o.status && o.status !== 'active') continue;
+        const ch = String(o.choice || '').toLowerCase();
+        if (ch === 'higher' || ch === 'lower') {
+          optMap[ch] = {
+            american_price: o.american_price,
+            payout_multiplier: o.payout_multiplier
+          };
+        }
+      }
+      const pOver = extractUnderdogDevigProb(optMap);
+      if (!byNorm.has(pinfo.norm)) {
+        byNorm.set(pinfo.norm, {
+          name: pinfo.name,
+          pos: pinfo.pos,
+          stats: {}
+        });
+      }
+      const entry = byNorm.get(pinfo.norm);
+      if (!entry.stats[stat] || l.line_type === 'balanced') {
+        entry.stats[stat] = {
+          stat_value: statVal,
+          p_over: Number(pOver.toFixed(4)),
+          line_type: l.line_type || 'balanced'
+        };
+      }
+    }
+
+    cache.set(cacheKey, { ts: now, data: byNorm });
+    return byNorm;
+  }
+
+  /**
+   * Convert an Underdog Fantasy player entry (`entry.stats`) into this league's exact custom scoring
+   * and structured prop breakdown (`passYds`, `passTd`, `passCmp`, `rushYds`, `rec`, `recYds`, `td`, `anytimeTdProb`, `tackles`, `sacks`, `defInts`).
+   */
+  function computeLeaguePointsFromUnderdogEntry(pos, udEntry, projStats, scoringSettings) {
+    if (!udEntry || !udEntry.stats || !scoringSettings) return null;
+    const stats = udEntry.stats;
+    const isIdp = ['DL', 'LB', 'DB'].includes(pos);
+
+    if (isIdp) {
+      const hasIdpProp = ['tackles_and_assists', 'tackles', 'assists', 'sacks', 'defensive_ints'].some((k) => stats[k] !== undefined);
+      if (!hasIdpProp) return null;
+
+      let totalTackles = Number(projStats?.idp_tkl || 4.0);
+      if (stats.tackles_and_assists) {
+        const sv = Number(stats.tackles_and_assists.stat_value);
+        const po = Number(stats.tackles_and_assists.p_over);
+        totalTackles = Math.max(0.5, Number((sv + Math.max(1.1, sv * 0.28) * invNormCdf(po)).toFixed(2)));
+      } else if (stats.tackles || stats.assists) {
+        const solo = stats.tackles ? Number(stats.tackles.stat_value) : 2.5;
+        const ast = stats.assists ? Number(stats.assists.stat_value) : 1.5;
+        totalTackles = Number((solo + ast).toFixed(2));
+      }
+
+      let sacks = Number(projStats?.idp_sack || 0.25);
+      if (stats.sacks) {
+        sacks = Number(invertPoissonMean(Number(stats.sacks.stat_value), Number(stats.sacks.p_over)).toFixed(2));
+      }
+
+      let defInts = Number(projStats?.idp_int || 0.08);
+      if (stats.defensive_ints) {
+        defInts = Number(invertPoissonMean(Number(stats.defensive_ints.stat_value), Number(stats.defensive_ints.p_over)).toFixed(2));
+      }
+
+      // Include ancillary IDP stats from baseline projection (QB hits, TFL, pass def, FF/FR)
+      const tfl = Number(projStats?.idp_tkl_loss || (sacks * 0.85 + totalTackles * 0.08));
+      const qbHit = Number(projStats?.idp_qb_hit || (sacks * 1.65));
+      const passDef = Number(projStats?.idp_pass_def || (defInts * 3.2 + (pos === 'DB' ? 0.45 : 0.15)));
+      const ff = Number(projStats?.idp_ff || 0.08);
+      const fumRec = Number(projStats?.idp_fum_rec || 0.04);
+
+      const pts =
+        totalTackles * (scoringSettings.idp_tkl ?? 0.5) +
+        sacks * (scoringSettings.idp_sack ?? 3.0) +
+        defInts * (scoringSettings.idp_int ?? 4.0) +
+        tfl * (scoringSettings.idp_tkl_loss ?? 0.5) +
+        qbHit * (scoringSettings.idp_qb_hit ?? 0.5) +
+        passDef * (scoringSettings.idp_pass_def ?? 2.5) +
+        ff * (scoringSettings.idp_ff ?? 3.0) +
+        fumRec * (scoringSettings.idp_fum_rec ?? 2.0);
+
+      return {
+        pts: Math.max(0.5, Number(pts.toFixed(2))),
+        props: {
+          passYds: 0,
+          passTd: 0,
+          rushYds: 0,
+          rec: 0,
+          recYds: 0,
+          td: 0,
+          anytimeTdProb: 0,
+          tackles: totalTackles,
+          sacks,
+          defInts,
+          source: 'Underdog IDP Props'
+        }
+      };
+    }
+
+    // Offensive players (QB, RB, WR, TE)
+    const offKeys = ['passing_yds', 'passing_tds', 'passing_ints', 'passing_comps', 'rushing_yds', 'receiving_rec', 'receiving_yds', 'rush_rec_tds', 'rush_rec_yds', 'fantasy_points'];
+    const matched = offKeys.filter((k) => stats[k] !== undefined);
+    if (matched.length === 0) return null;
+
+    let py = Number(projStats?.pass_yd || 0);
+    let ptd = Number(projStats?.pass_td || 0);
+    let pcmp = Number(projStats?.pass_cmp || (py > 0 ? py / 11.15 : 0));
+    let pint = Number(projStats?.pass_int || 0);
+    let ry = Number(projStats?.rush_yd || 0);
+    let rec = Number(projStats?.rec || 0);
+    let recy = Number(projStats?.rec_yd || 0);
+    let td = Number((projStats?.rush_td || 0) + (projStats?.rec_td || 0));
+    let anytimeTdProb = td > 0 ? Number((1 - Math.exp(-td)).toFixed(3)) : 0;
+
+    if (stats.passing_yds) {
+      const sv = Number(stats.passing_yds.stat_value);
+      const po = Number(stats.passing_yds.p_over);
+      py = Math.max(0, Number((sv + 42.0 * invNormCdf(po)).toFixed(1)));
+      if (!stats.passing_comps) pcmp = Number((py / 11.15).toFixed(1));
+    }
+    if (stats.passing_comps) {
+      const sv = Number(stats.passing_comps.stat_value);
+      const po = Number(stats.passing_comps.p_over);
+      pcmp = Math.max(0, Number((sv + 3.2 * invNormCdf(po)).toFixed(1)));
+    }
+    if (stats.passing_tds) {
+      ptd = Number(invertPoissonMean(Number(stats.passing_tds.stat_value), Number(stats.passing_tds.p_over)).toFixed(2));
+    }
+    if (stats.passing_ints) {
+      pint = Number(invertPoissonMean(Number(stats.passing_ints.stat_value), Number(stats.passing_ints.p_over)).toFixed(2));
+    }
+    if (stats.rushing_yds) {
+      const sv = Number(stats.rushing_yds.stat_value);
+      const po = Number(stats.rushing_yds.p_over);
+      ry = Math.max(0, Number((sv * 1.025 + Math.max(7.5, sv * 0.32) * invNormCdf(po)).toFixed(1)));
+    }
+    if (stats.receiving_rec) {
+      const sv = Number(stats.receiving_rec.stat_value);
+      const po = Number(stats.receiving_rec.p_over);
+      const poisMean = invertPoissonMean(sv, po);
+      const normMean = Math.max(0, sv + 0.12 + Math.max(0.85, sv * 0.28) * invNormCdf(po));
+      rec = Number((0.55 * poisMean + 0.45 * normMean).toFixed(2));
+    }
+    if (stats.receiving_yds) {
+      const sv = Number(stats.receiving_yds.stat_value);
+      const po = Number(stats.receiving_yds.p_over);
+      recy = Math.max(0, Number((sv * 1.025 + Math.max(8.0, sv * 0.30) * invNormCdf(po)).toFixed(1)));
+    }
+    if (stats.rush_rec_yds) {
+      const sv = Number(stats.rush_rec_yds.stat_value);
+      const po = Number(stats.rush_rec_yds.p_over);
+      const comboMean = Math.max(0, sv * 1.025 + Math.max(10.0, sv * 0.28) * invNormCdf(po));
+      if (stats.rushing_yds && !stats.receiving_yds) {
+        recy = Math.max(0, Number((comboMean - ry).toFixed(1)));
+        if (!stats.receiving_rec && recy > 0) rec = Number((recy / 8.5).toFixed(2));
+      } else if (stats.receiving_yds && !stats.rushing_yds) {
+        ry = Math.max(0, Number((comboMean - recy).toFixed(1)));
+      }
+    }
+    if (stats.rush_rec_tds) {
+      const sv = Number(stats.rush_rec_tds.stat_value);
+      const po = Number(stats.rush_rec_tds.p_over);
+      td = Number(invertPoissonMean(sv, po).toFixed(2));
+      anytimeTdProb = sv < 1.0 ? Number(po.toFixed(3)) : Number((1 - Math.exp(-td)).toFixed(3));
+    }
+
+    let fumLost = pos === 'QB' ? 0.18 : (pos === 'RB' ? 0.08 : 0.04);
+    if (stats.fumbles_lost) {
+      fumLost = Number(invertPoissonMean(Number(stats.fumbles_lost.stat_value), Number(stats.fumbles_lost.p_over)).toFixed(2));
+    }
+
+    // Calculate bottom-up fantasy points in THIS league's exact scoring settings
+    let statPts = 0;
+    if (pos === 'QB') {
+      statPts += py * (scoringSettings.pass_yd ?? 0.04);
+      statPts += pcmp * (scoringSettings.pass_cmp ?? 0.10);
+      statPts += ptd * (scoringSettings.pass_td ?? 4.0);
+      statPts += pint * (scoringSettings.pass_int ?? -2.0);
+      statPts += ry * (scoringSettings.rush_yd ?? 0.1);
+      statPts += td * (scoringSettings.rush_td ?? 6.0);
+      statPts += fumLost * (scoringSettings.fum_lost ?? -2.0);
+      statPts += 0.08 * (scoringSettings.pass_2pt ?? 2.0);
+    } else {
+      statPts += ry * (scoringSettings.rush_yd ?? 0.1);
+      statPts += rec * (scoringSettings.rec ?? 0.5);
+      statPts += recy * (scoringSettings.rec_yd ?? 0.1);
+      statPts += td * (scoringSettings.rec_td ?? 6.0);
+      statPts += fumLost * (scoringSettings.fum_lost ?? -2.0);
+      statPts += 0.03 * (scoringSettings.rec_2pt ?? 2.0);
+    }
+
+    // Also check Underdog's direct `fantasy_points` line (Underdog native is 0.5 PPR, 4pt Pass TD, -2 INT; add pass_cmp bonus for QBs)
+    let udDirectFpts = null;
+    if (stats.fantasy_points) {
+      const svFp = Number(stats.fantasy_points.stat_value);
+      const poFp = Number(stats.fantasy_points.p_over);
+      const rawUdFp = Math.max(0, svFp + Math.max(2.2, svFp * 0.25) * invNormCdf(poFp));
+      const cmpBonus = pos === 'QB' ? pcmp * (scoringSettings.pass_cmp ?? 0.10) : 0;
+      const pprAdjust = pos !== 'QB' ? rec * ((scoringSettings.rec ?? 0.5) - 0.5) : 0;
+      udDirectFpts = Number((rawUdFp + cmpBonus + pprAdjust).toFixed(2));
+    }
+
+    const hasYardageLine = Boolean(stats.passing_yds || stats.rushing_yds || stats.receiving_yds || stats.receiving_rec || stats.rush_rec_yds);
+    let finalPts = statPts;
+    if (hasYardageLine && udDirectFpts !== null) {
+      finalPts = 0.75 * statPts + 0.25 * udDirectFpts;
+    } else if (!hasYardageLine && udDirectFpts !== null) {
+      finalPts = udDirectFpts;
+    }
+
+    return {
+      pts: Math.max(0, Number(finalPts.toFixed(2))),
+      props: {
+        passYds: Number(py.toFixed(1)),
+        passTd: Number(ptd.toFixed(2)),
+        passCmp: Number(pcmp.toFixed(1)),
+        passInt: Number(pint.toFixed(2)),
+        rushYds: Number(ry.toFixed(1)),
+        rec: Number(rec.toFixed(2)),
+        recYds: Number(recy.toFixed(1)),
+        td: Number(td.toFixed(2)),
+        anytimeTdProb,
+        udFantasyPts: udDirectFpts,
+        source: 'Underdog Live'
+      }
+    };
+  }
+
+  /**
+   * Convert OWS Sportsbook Player Prop Lines (py, ptd, int, ry, rec, recy, td)
    * directly into THIS Sleeper league's custom scoring_settings!
    */
   function computeLeaguePointsFromSportsbookLine(pos, line, scoringSettings) {
@@ -104,7 +487,6 @@
 
     let pts = 0;
     if (pos === 'QB') {
-      // NFL average yards per completion ~ 11.15 -> estimate completions for pass_cmp bonus
       const estCompletions = py > 0 ? py / 11.15 : 0;
       pts += py * (scoringSettings.pass_yd ?? 0.04);
       pts += estCompletions * (scoringSettings.pass_cmp ?? 0.0);
@@ -124,6 +506,52 @@
       pts += 0.03 * (scoringSettings.rec_2pt ?? 2.0);
     }
     return Math.max(0, Number(pts.toFixed(2)));
+  }
+
+  /**
+   * Synthesize Vegas & CFTC Prediction Market implied prop lines for any active player
+   * not listed on Underdog/OWS (e.g. completed TNF games, rotational players, or historical backtest weeks).
+   * Guarantees 100% of active players every week have populated market projections & prop lines!
+   */
+  function synthesizeVegasMarketProps(pos, projStats, marketScaleMult = 1.0) {
+    const isIdp = ['DL', 'LB', 'DB'].includes(pos);
+    if (isIdp) {
+      const tackles = Number(((projStats?.idp_tkl || 4.2) * marketScaleMult).toFixed(1));
+      const sacks = Number(((projStats?.idp_sack || 0.25) * marketScaleMult).toFixed(2));
+      const defInts = Number(((projStats?.idp_int || 0.08) * marketScaleMult).toFixed(2));
+      return {
+        passYds: 0,
+        passTd: 0,
+        rushYds: 0,
+        rec: 0,
+        recYds: 0,
+        td: 0,
+        anytimeTdProb: 0,
+        tackles,
+        sacks,
+        defInts,
+        source: 'Vegas/CFTC Game Script'
+      };
+    }
+    const py = Number(((projStats?.pass_yd || 0) * marketScaleMult).toFixed(1));
+    const ptd = Number(((projStats?.pass_td || 0) * marketScaleMult).toFixed(2));
+    const pcmp = Number(((projStats?.pass_cmp || (py > 0 ? py / 11.15 : 0)) * marketScaleMult).toFixed(1));
+    const ry = Number(((projStats?.rush_yd || 0) * marketScaleMult).toFixed(1));
+    const rec = Number(((projStats?.rec || 0) * marketScaleMult).toFixed(2));
+    const recy = Number(((projStats?.rec_yd || 0) * marketScaleMult).toFixed(1));
+    const td = Number((((projStats?.rush_td || 0) + (projStats?.rec_td || 0)) * marketScaleMult).toFixed(2));
+    const anytimeTdProb = td > 0 ? Number((1 - Math.exp(-td)).toFixed(3)) : 0;
+    return {
+      passYds: py,
+      passTd: ptd,
+      passCmp: pcmp,
+      rushYds: ry,
+      rec,
+      recYds: recy,
+      td,
+      anytimeTdProb,
+      source: 'Vegas/CFTC Implied'
+    };
   }
 
   function parseClockSeconds(clockStr) {
@@ -373,7 +801,7 @@
    *  - Prediction Market Win Probability & Vegas Implied Team Total environment adjustment
    *  - Live in-game Bayesian usage, game script, and Red Zone micro-states
    */
-  function modelPlayer(playerId, actualPts, projEntry, statEntry, gameState, scoringSettings, sbPropEntry = null, marketWeight = 0.75) {
+  function modelPlayer(playerId, actualPts, projEntry, statEntry, gameState, scoringSettings, sbPropEntry = null, marketWeight = 0.75, udEntry = null, marketSource = 'consensus') {
     const pInfo = (projEntry && projEntry.player) || (statEntry && statEntry.player) || {};
     const projStats = (projEntry && projEntry.stats) || {};
     const liveStats = (statEntry && statEntry.stats) || {};
@@ -398,7 +826,7 @@
       : computeCustomPoints(liveStats, scoringSettings);
 
     // Team Market Context (Implied Total, Spread, Prediction Market Win %)
-    const isHome = gameState && gameState.homeTeam === team;
+    const isHome = Boolean(gameState && gameState.homeTeam === team);
     const teamImpliedTotal = gameState
       ? (isHome ? gameState.homeImpliedTotal : gameState.awayImpliedTotal)
       : 22.5;
@@ -413,48 +841,109 @@
       : 0.5;
     const vegasTotal = gameState ? gameState.vegasTotal : 45.0;
 
-    // Sportsbook Prop Implied Points in this league's scoring
+    // 1. Underdog Fantasy Live Market Props (All NFL Games: Sun 1pm, 4pm, SNF, MNF, TNF + IDP)
+    const udParsed = udEntry ? computeLeaguePointsFromUnderdogEntry(pos, udEntry, projStats, scoringSettings) : null;
+    const rawUdProj = udParsed ? udParsed.pts : null;
+
+    // 2. OWS Sportsbook Prop Implied Points (Sunday Main Slate)
     const sbLine = sbPropEntry ? sbPropEntry.line : null;
-    const rawSbProj = sbLine ? computeLeaguePointsFromSportsbookLine(pos, sbLine, scoringSettings) : null;
+    const rawOwsProj = sbLine ? computeLeaguePointsFromSportsbookLine(pos, sbLine, scoringSettings) : null;
+    const owsPropsObj = sbLine
+      ? {
+          passYds: Number(sbLine.py || 0),
+          passTd: Number(sbLine.ptd || 0),
+          passCmp: Number(((sbLine.py || 0) / 11.15).toFixed(1)),
+          rushYds: Number(sbLine.ry || 0),
+          rec: Number(sbLine.rec || 0),
+          recYds: Number(sbLine.recy || 0),
+          td: Number(sbLine.td || 0),
+          anytimeTdProb: sbLine.td > 0 ? Number((1 - Math.exp(-Number(sbLine.td))).toFixed(3)) : 0,
+          source: 'OWS Sportsbook'
+        }
+      : null;
 
-    // Prediction Market & Vegas Implied Team Total environment adjustment for players without direct prop lines (e.g. MNF or IDP)
-    let marketImpliedPregame = customLeaguePregameProj;
-    let marketSourceLabel = 'Sleeper Base';
-    if (rawSbProj !== null && rawSbProj > 0) {
-      // Blend direct sportsbook player props with prediction-market win script modifier
-      const pmDelta = predMarketWinProb - Math.min(0.95, Math.max(0.05, 0.5 - teamSpread * 0.031));
-      const pmScriptBoost = pos === 'RB' ? (1 + pmDelta * 0.18) : (['QB', 'WR', 'TE'].includes(pos) ? (1 + pmDelta * 0.08) : 1.0);
-      const pureMarketEst = rawSbProj * pmScriptBoost;
-      marketImpliedPregame = marketWeight * pureMarketEst + (1 - marketWeight) * customLeaguePregameProj;
-      marketSourceLabel = 'Sportsbook Props + PM';
-    } else if (customLeaguePregameProj > 0 && gameState && gameState.status !== 'bye') {
-      // Adjust baseline weekly projection using residual Prediction Market divergence (PM vs Spread),
-      // high-volume RB touch equity, dome/wind micro-adjustments, and gentle Vegas environment tilt
-      const isIdp = ['DL', 'LB', 'DB'].includes(pos);
-      const isDome = Boolean(gameState.isDome);
-      const windSpeed = Number(gameState.windSpeed || 0);
-      const spreadImpliedProb = Math.min(0.95, Math.max(0.05, 0.5 - teamSpread * 0.031));
-      const pmEdge = predMarketWinProb - spreadImpliedProb; // CFTC Prediction Market edge over static spread
+    // 3. Vegas + Sleeper CFTC Prediction Market Environment Projection & Synthesized Props (100% Player Coverage)
+    const isDome = Boolean(gameState && gameState.isDome);
+    const windSpeed = Number((gameState && gameState.windSpeed) || 0);
+    const spreadImpliedProb = Math.min(0.95, Math.max(0.05, 0.5 - teamSpread * 0.031));
+    const pmEdge = predMarketWinProb - spreadImpliedProb;
 
-      if (!isIdp) {
-        const totalTilt = Math.max(0.95, Math.min(1.06, Math.pow(teamImpliedTotal / 22.5, 0.11)));
-        const pmScriptMod = 1.0 + pmEdge * (pos === 'RB' ? 0.22 : 0.14);
-        // Primary RBs in favored/close scripts carry higher touch & goal-line TD floor in 0.5 PPR
-        const projRushAtt = Number(projStats.rush_att || 0);
-        const rbVolumeBonus = (pos === 'RB' && projRushAtt >= 11 && predMarketWinProb >= 0.45) ? 1.025 : 1.0;
-        const weatherMod = (!isDome && windSpeed >= 16 && ['QB', 'WR'].includes(pos))
-          ? 0.965
-          : (isDome && ['QB', 'WR'].includes(pos) ? 1.012 : 1.0);
-        const pureEnvEst = customLeaguePregameProj * totalTilt * pmScriptMod * rbVolumeBonus * weatherMod;
-        marketImpliedPregame = marketWeight * pureEnvEst + (1 - marketWeight) * customLeaguePregameProj;
-        marketSourceLabel = `PM + Vegas (${teamImpliedTotal.toFixed(1)} pts)`;
-      } else {
-        const oppPassHeavy = predMarketWinProb >= 0.55 ? 1.03 : 1.0;
-        const gamePace = Math.max(0.95, Math.min(1.05, vegasTotal / 45.0));
-        const pureIdpEst = customLeaguePregameProj * (pos === 'DL' ? oppPassHeavy : gamePace);
-        marketImpliedPregame = marketWeight * pureIdpEst + (1 - marketWeight) * customLeaguePregameProj;
-        marketSourceLabel = 'Game Pace + PM Script';
+    let envScaleMult = 1.0;
+    if (!isIdpPosBase) {
+      const totalTilt = Math.max(0.95, Math.min(1.06, Math.pow(teamImpliedTotal / 22.5, 0.11)));
+      const pmScriptMod = 1.0 + pmEdge * (pos === 'RB' ? 0.22 : 0.14);
+      const projRushAtt = Number(projStats.rush_att || 0);
+      const rbVolumeBonus = (pos === 'RB' && projRushAtt >= 11 && predMarketWinProb >= 0.45) ? 1.025 : 1.0;
+      const weatherMod = (!isDome && windSpeed >= 16 && ['QB', 'WR'].includes(pos))
+        ? 0.965
+        : (isDome && ['QB', 'WR'].includes(pos) ? 1.012 : 1.0);
+      envScaleMult = totalTilt * pmScriptMod * rbVolumeBonus * weatherMod;
+    } else {
+      const oppPassHeavy = predMarketWinProb >= 0.55 ? 1.03 : 1.0;
+      const gamePace = Math.max(0.95, Math.min(1.05, vegasTotal / 45.0));
+      envScaleMult = pos === 'DL' ? oppPassHeavy : gamePace;
+    }
+
+    const vegasMarketProj = customLeaguePregameProj > 0
+      ? Number((customLeaguePregameProj * envScaleMult).toFixed(2))
+      : 0;
+    const vegasPropsObj = synthesizeVegasMarketProps(pos, projStats, envScaleMult);
+
+    // Combine Underdog + OWS Sportsbook + Vegas/CFTC according to `marketSource` so 100% of active players have props & projections
+    let activeDirectMarketProj = null;
+    let activePropsObj = vegasPropsObj;
+    let marketSourceLabel = `PM + Vegas (${teamImpliedTotal.toFixed(1)} pts)`;
+
+    if (marketSource === 'underdog') {
+      if (rawUdProj !== null && rawUdProj > 0) {
+        activeDirectMarketProj = rawUdProj;
+        activePropsObj = udParsed.props;
+        marketSourceLabel = udParsed.props.source;
       }
+    } else if (marketSource === 'ows') {
+      if (rawOwsProj !== null && rawOwsProj > 0) {
+        activeDirectMarketProj = rawOwsProj;
+        activePropsObj = owsPropsObj;
+        marketSourceLabel = 'OWS Sportsbook';
+      }
+    } else if (marketSource !== 'vegas') {
+      // 'consensus': Blend Underdog Live Props + OWS Sportsbook when both exist; otherwise use whichever exists!
+      if (rawUdProj !== null && rawUdProj > 0 && rawOwsProj !== null && rawOwsProj > 0) {
+        activeDirectMarketProj = Number((0.55 * rawUdProj + 0.45 * rawOwsProj).toFixed(2));
+        activePropsObj = {
+          passYds: Number((0.55 * udParsed.props.passYds + 0.45 * owsPropsObj.passYds).toFixed(1)),
+          passTd: Number((0.55 * udParsed.props.passTd + 0.45 * owsPropsObj.passTd).toFixed(2)),
+          passCmp: udParsed.props.passCmp,
+          rushYds: Number((0.55 * udParsed.props.rushYds + 0.45 * owsPropsObj.rushYds).toFixed(1)),
+          rec: Number((0.55 * udParsed.props.rec + 0.45 * owsPropsObj.rec).toFixed(2)),
+          recYds: Number((0.55 * udParsed.props.recYds + 0.45 * owsPropsObj.recYds).toFixed(1)),
+          td: Number((0.55 * udParsed.props.td + 0.45 * owsPropsObj.td).toFixed(2)),
+          anytimeTdProb: Number((0.55 * udParsed.props.anytimeTdProb + 0.45 * owsPropsObj.anytimeTdProb).toFixed(3)),
+          udFantasyPts: udParsed.props.udFantasyPts,
+          source: 'Underdog + Sportsbook'
+        };
+        marketSourceLabel = 'Underdog + Sportsbook';
+      } else if (rawUdProj !== null && rawUdProj > 0) {
+        activeDirectMarketProj = rawUdProj;
+        activePropsObj = udParsed.props;
+        marketSourceLabel = udParsed.props.source;
+      } else if (rawOwsProj !== null && rawOwsProj > 0) {
+        activeDirectMarketProj = rawOwsProj;
+        activePropsObj = owsPropsObj;
+        marketSourceLabel = 'OWS Sportsbook';
+      }
+    }
+
+    let marketImpliedPregame = customLeaguePregameProj;
+    let displayMarketProj = vegasMarketProj;
+    if (activeDirectMarketProj !== null && activeDirectMarketProj > 0) {
+      const pmScriptBoost = pos === 'RB' ? (1 + pmEdge * 0.18) : (['QB', 'WR', 'TE'].includes(pos) ? (1 + pmEdge * 0.08) : 1.0);
+      const pureMarketEst = activeDirectMarketProj * pmScriptBoost;
+      displayMarketProj = Number(pureMarketEst.toFixed(2));
+      marketImpliedPregame = marketWeight * pureMarketEst + (1 - marketWeight) * customLeaguePregameProj;
+    } else if (customLeaguePregameProj > 0 && gameState && gameState.status !== 'bye') {
+      displayMarketProj = vegasMarketProj;
+      marketImpliedPregame = marketWeight * vegasMarketProj + (1 - marketWeight) * customLeaguePregameProj;
     }
 
     const isBye = String(playerId) === '0' || !gameState || gameState.status === 'bye' || (!opponent && (!gameState || !gameState.homeTeam));
@@ -469,6 +958,7 @@
         canonicalPos: pos,
         team,
         opponent,
+        isHome,
         injuryStatus,
         gameStatus: finalStatus,
         gameId: isBye ? null : gameState.gameId,
@@ -480,16 +970,23 @@
         currentPts: isBye ? 0 : currentPts,
         pregameProj: isBye ? 0 : Number(marketImpliedPregame.toFixed(2)),
         sleeperPregameProj: isBye ? 0 : Number(sleeperPregameProj.toFixed(2)),
-        sportsbookProj: rawSbProj,
+        sportsbookProj: isBye ? 0 : displayMarketProj,
+        underdogProj: rawUdProj,
+        owsSportsbookProj: rawOwsProj,
+        vegasMarketProj: isBye ? 0 : vegasMarketProj,
+        sportsbookProps: isBye ? null : activePropsObj,
         sportsbookLine: sbLine,
-        marketSourceLabel: isBye ? 'BYE' : 'Final',
+        marketSourceLabel: isBye ? 'BYE' : `${marketSourceLabel} (Final)`,
         teamImpliedTotal,
+        teamImpliedPts: teamImpliedTotal,
         oppImpliedTotal,
         vegasTotal,
         teamSpread,
         predMarketWinProb,
         sleeperProj: isBye ? 0 : currentPts,
         improvedProj: isBye ? 0 : currentPts,
+        floor: isBye ? 0 : currentPts,
+        ceiling: isBye ? 0 : currentPts,
         remMeanSleeper: 0,
         remMeanImproved: 0,
         remSdSleeper: 0,
@@ -519,10 +1016,10 @@
     let gameScriptMult = 1.0;
     let driveBonus = 0.0;
 
-    if (rawSbProj !== null) {
+    if (displayMarketProj > 0) {
       const sbDiff = marketImpliedPregame - sleeperPregameProj;
-      if (Math.abs(sbDiff) >= 0.6) {
-        reasons.push(`Market ${sbDiff >= 0 ? '+' : ''}${sbDiff.toFixed(1)} vs Slp`);
+      if (Math.abs(sbDiff) >= 0.5) {
+        reasons.push(`${marketSourceLabel} ${sbDiff >= 0 ? '+' : ''}${sbDiff.toFixed(1)} vs Slp`);
       }
     }
 
@@ -642,6 +1139,9 @@
       ? Math.min(2.4, posVolatility.skew / Math.pow(Math.max(0.12, effectiveRem), 0.28))
       : 0;
 
+    const floorVal = Math.max(currentPts, Number((improvedProj - 1.2816 * remSdImproved).toFixed(2)));
+    const ceilingVal = Number((improvedProj + 1.2816 * remSdImproved).toFixed(2));
+
     return {
       playerId,
       fullName,
@@ -651,6 +1151,7 @@
       canonicalPos: pos,
       team,
       opponent,
+      isHome,
       injuryStatus,
       gameStatus: gameState.status,
       gameId: gameState.gameId,
@@ -664,16 +1165,23 @@
       currentPts,
       pregameProj: Number(marketImpliedPregame.toFixed(2)),
       sleeperPregameProj: Number(sleeperPregameProj.toFixed(2)),
-      sportsbookProj: rawSbProj,
+      sportsbookProj: displayMarketProj,
+      underdogProj: rawUdProj,
+      owsSportsbookProj: rawOwsProj,
+      vegasMarketProj,
+      sportsbookProps: activePropsObj,
       sportsbookLine: sbLine,
       marketSourceLabel,
       teamImpliedTotal,
+      teamImpliedPts: teamImpliedTotal,
       oppImpliedTotal,
       vegasTotal,
       teamSpread,
       predMarketWinProb,
       sleeperProj: Number(sleeperProj.toFixed(2)),
       improvedProj: Number(improvedProj.toFixed(2)),
+      floor: floorVal,
+      ceiling: ceilingVal,
       remMeanSleeper: Number(remMeanSleeper.toFixed(3)),
       remMeanImproved: Number(remMeanImproved.toFixed(3)),
       remSdSleeper: Number(remSdSleeper.toFixed(3)),
@@ -2226,15 +2734,16 @@
     });
   }
 
-  async function getLeagueLiveState(leagueId = DEFAULT_LEAGUE_ID, requestedWeek = null, forceRefresh = false, autoSubByeOut = false, marketWeight = 0.75) {
+  async function getLeagueLiveState(leagueId = DEFAULT_LEAGUE_ID, requestedWeek = null, forceRefresh = false, autoSubByeOut = false, marketWeight = 0.75, marketSource = 'consensus') {
     const startMs = Date.now();
     const ttl = forceRefresh ? 0 : 8000;
 
-    const [nflState, league, users, rosters, owsFeed, espnBoard] = await Promise.all([
+    const [nflState, league, users, rosters, udByName, owsFeed, espnBoard] = await Promise.all([
       fetchJson('https://api.sleeper.app/v1/state/nfl', {}, ttl),
       fetchJson(`https://api.sleeper.app/v1/league/${leagueId}`, {}, ttl * 4),
       fetchJson(`https://api.sleeper.app/v1/league/${leagueId}/users`, {}, ttl * 2),
       fetchJson(`https://api.sleeper.app/v1/league/${leagueId}/rosters`, {}, ttl),
+      fetchUnderdogNflMap(forceRefresh ? 0 : 180000).catch(() => new Map()),
       fetchJson(OWS_SPORTSBOOK_URL, {}, 120000).catch(() => null),
       fetchJson(ESPN_SCOREBOARD_URL, {}, 60000).catch(() => null)
     ]);
@@ -2259,9 +2768,10 @@
       }, ttl)
     ]);
 
-    // Build external game odds & sportsbook player prop maps (when activeWeek matches OWS/ESPN week)
+    // Build external game odds & sportsbook player prop maps (when activeWeek matches current week)
     const externalOddsMap = {};
     const sbPropsByName = new Map();
+    const isCurrentWeek = activeWeek === currentNflWeek;
 
     if (espnBoard && Array.isArray(espnBoard.events)) {
       for (const ev of espnBoard.events) {
@@ -2349,10 +2859,12 @@
         const sEntry = statMap.get(pidStr);
         const pInfo = pEntry?.player || sEntry?.player || {};
         const fullName = `${pInfo.first_name || ''} ${pInfo.last_name || ''}`.trim();
-        const sbEntry = sbPropsByName.get(normalizePlayerName(fullName)) || null;
+        const normKey = normalizePlayerName(fullName);
+        const sbEntry = sbPropsByName.get(normKey) || null;
+        const udEntry = (isCurrentWeek && udByName) ? (udByName.get(normKey) || null) : null;
         const team = normalizeTeamCode(pEntry?.team || sEntry?.team || pInfo.team || 'FA');
         const gs = gameStatesByTeam[team] || null;
-        const modeled = modelPlayer(pidStr, actualPts, pEntry, sEntry, gs, scoringSettings, sbEntry, marketWeight);
+        const modeled = modelPlayer(pidStr, actualPts, pEntry, sEntry, gs, scoringSettings, sbEntry, marketWeight, udEntry, marketSource);
         modeled.slot = slotName;
         return modeled;
       };
@@ -2396,7 +2908,9 @@
       computeTimeMs: Date.now() - startMs,
       autoSubByeOut,
       marketWeight,
+      marketSource,
       sportsbookWeekLoaded: owsFeed ? Number(owsFeed.week) : null,
+      underdogPlayersLoaded: udByName ? udByName.size : 0,
       league: {
         leagueId: league.league_id,
         name: league.name,

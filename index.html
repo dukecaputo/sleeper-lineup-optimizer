@@ -560,12 +560,12 @@
         <div>
           <div class="brand-title">
             <span>Fantasy Fortèball — Lineup Optimizer</span>
-            <span class="brand-badge">Sportsbook + 10K CRN Sim</span>
+            <span class="brand-badge">Underdog + Sportsbook + 10K Sim</span>
           </div>
           <div class="brand-subtitle">
             <span>Sleeper League <code class="mono">1312258310212165632</code></span>
             <span>•</span>
-            <span id="statusText">Loading live sportsbook & prediction market feeds...</span>
+            <span id="statusText">Loading Underdog Fantasy, Sportsbook & CFTC Prediction Market feeds...</span>
           </div>
         </div>
       </div>
@@ -597,6 +597,16 @@
         </div>
 
         <div class="ctrl-group">
+          <label class="ctrl-label" for="marketSourceSelect">Market Prop Source</label>
+          <select id="marketSourceSelect">
+            <option value="consensus" selected>Underdog + Sportsbook + Vegas (100% Coverage)</option>
+            <option value="underdog">Underdog Fantasy Pick'em Market (All Games + IDP)</option>
+            <option value="ows">OWS Sportsbook + Vegas Implied</option>
+            <option value="vegas">Vegas Implied Totals + Sleeper CFTC Only</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group">
           <label class="ctrl-label" for="objectiveSelect">Optimization Goal</label>
           <select id="objectiveSelect">
             <option value="total_wins" selected>Max Expected Total Wins (H2H + Median)</option>
@@ -608,12 +618,12 @@
         </div>
 
         <div class="ctrl-group">
-          <label class="ctrl-label" for="marketWeightSelect">Sportsbook Blend Weight</label>
+          <label class="ctrl-label" for="marketWeightSelect">Market Blend Weight</label>
           <select id="marketWeightSelect">
-            <option value="0.75" selected>75% Sportsbook / 25% Sleeper (Optimal)</option>
-            <option value="1.0">100% Pure Sportsbook Props</option>
-            <option value="0.5">50% Sportsbook / 50% Sleeper</option>
-            <option value="0.0">0% Sportsbook (Raw Sleeper Only)</option>
+            <option value="0.75" selected>75% Market Props / 25% Sleeper (Optimal)</option>
+            <option value="1.0">100% Pure Market Props</option>
+            <option value="0.5">50% Market / 50% Sleeper</option>
+            <option value="0.0">0% Market (Raw Sleeper Only)</option>
           </select>
         </div>
 
@@ -648,7 +658,7 @@
         <span class="tab-pill">+49.7 Pts / +1 Win</span>
       </button>
       <button class="tab-btn" data-tab="props">
-        📊 Sportsbook Props & Vegas Game Environment
+        📊 Underdog & Sportsbook Props Explorer (All Games + IDP)
       </button>
     </div>
 
@@ -666,7 +676,7 @@
     </div>
 
     <div id="tab-props" class="tab-panel" style="display:none;">
-      <div class="loading-banner">Loading Sportsbook Player Props & Vegas Game Lines...</div>
+      <div class="loading-banner">Loading Underdog Fantasy & Sportsbook Player Props...</div>
     </div>
   </main>
 
@@ -679,6 +689,7 @@
       let selectedWeek = 8;
       let selectedObjective = 'total_wins';
       let selectedMarketWeight = 0.75;
+      let selectedMarketSource = 'consensus';
 
       let liveState = null;
       let optimizerResult = null;
@@ -733,6 +744,11 @@
         await loadWeekAndOptimize(true);
       });
 
+      document.getElementById('marketSourceSelect').addEventListener('change', async (e) => {
+        selectedMarketSource = e.target.value;
+        await loadWeekAndOptimize(true);
+      });
+
       document.getElementById('objectiveSelect').addEventListener('change', (e) => {
         selectedObjective = e.target.value;
         recomputeOptimizer();
@@ -751,7 +767,7 @@
 
       async function loadWeekAndOptimize(forceRefresh = false) {
         const statusEl = document.getElementById('statusText');
-        statusEl.textContent = `Fetching Week ${selectedWeek} Sleeper, Sportsbook Props & Vegas lines...`;
+        statusEl.textContent = `Fetching Week ${selectedWeek} Sleeper, Underdog Fantasy (${selectedMarketSource}) & Vegas lines...`;
         try {
           const nflState = await fetch('https://api.sleeper.app/v1/state/nfl').then((r) => r.json()).catch(() => ({ display_week: 8 }));
           const currentNflWeek = Number(nflState.display_week || 8);
@@ -760,12 +776,13 @@
           if (selectedWeek < currentNflWeek) {
             liveState = await SleeperEngine.getPregameHistoricalWeekState(LEAGUE_ID, selectedWeek, selectedMarketWeight);
           } else {
-            liveState = await SleeperEngine.getLeagueLiveState(LEAGUE_ID, selectedWeek, forceRefresh, false, selectedMarketWeight);
+            liveState = await SleeperEngine.getLeagueLiveState(LEAGUE_ID, selectedWeek, forceRefresh, false, selectedMarketWeight, selectedMarketSource);
           }
 
           populateTeamDropdown(liveState.rostersData);
           recomputeOptimizer();
-          statusEl.textContent = `Week ${liveState.league.week} Active • ${liveState.sportsbookWeekLoaded ? `OWS Sportsbook Props Loaded (W${liveState.sportsbookWeekLoaded})` : `Historical Pregame Props & Vegas Model`} • 10,000 CRN Sims`;
+          const udCnt = liveState.underdogPlayersLoaded || 0;
+          statusEl.textContent = `Week ${liveState.league.week} Active • ${udCnt > 0 ? `Underdog Live (${udCnt} NFL Players, All Games + IDP) + OWS Sportsbook + Vegas/CFTC` : `Historical Pregame Vegas & CFTC Market Model`} • 10,000 CRN Sims`;
         } catch (err) {
           console.error(err);
           statusEl.textContent = `Error loading data: ${err.message}`;
@@ -1091,9 +1108,9 @@
           <!-- Full 14-Slot Optimal Starting Lineup Table -->
           <div class="card">
             <div class="card-title">
-              <span>📋 Optimal 14-Slot Starting Lineup & Sportsbook Prop Breakdown</span>
+              <span>📋 Optimal 14-Slot Starting Lineup & Underdog / Sportsbook Prop Breakdown</span>
               <span style="font-size:11.5px; color:var(--text-muted); text-transform:none;">
-                Click "🧩 Best K-of-N Conflict Solver" tab above to test same-team or close-projection subsets
+                100% Player Coverage: Underdog Live Props (All Games + IDP) + OWS Sportsbook + Vegas/CFTC Implied Model
               </span>
             </div>
             <div class="table-wrap">
@@ -1103,11 +1120,12 @@
                     <th>Slot</th>
                     <th>Action</th>
                     <th>Player</th>
+                    <th>Market Source</th>
                     <th>Vegas Game Environment</th>
-                    <th>Sportsbook Player Prop Lines</th>
+                    <th>Underdog / Sportsbook Prop Lines</th>
                     <th>Sleeper Proj</th>
-                    <th>Sportsbook Proj</th>
-                    <th>Blended Market Proj</th>
+                    <th>Market Proj</th>
+                    <th>Blended Proj</th>
                     <th>80% Sim CI (Floor–Ceil)</th>
                   </tr>
                 </thead>
@@ -1121,11 +1139,20 @@
                             sb.passYds > 0 ? `${sb.passYds} PaYd (${sb.passTd} TD)` : null,
                             sb.rushYds > 0 ? `${sb.rushYds} RuYd` : null,
                             sb.rec > 0 ? `${sb.rec} Rec / ${sb.recYds} RecYd` : null,
-                            sb.anytimeTdProb > 0 ? `${Math.round(sb.anytimeTdProb * 100)}% TD` : null
+                            sb.anytimeTdProb > 0 ? `${Math.round(sb.anytimeTdProb * 100)}% TD` : null,
+                            sb.tackles > 0 ? `${sb.tackles} Tkl+Ast` : null,
+                            sb.sacks > 0 ? `${sb.sacks} Sack` : null,
+                            sb.defInts > 0 ? `${sb.defInts} INT` : null
                           ]
                             .filter(Boolean)
                             .join(' • ')
-                        : '<span style="color:var(--text-muted);">Vegas Team Implied Total Model</span>';
+                        : '<span style="color:var(--text-muted);">—</span>';
+
+                      const srcBadgeClass = (p.marketSourceLabel || '').includes('Underdog')
+                        ? 'badge-green'
+                        : (p.marketSourceLabel || '').includes('Sportsbook')
+                        ? 'badge-cyan'
+                        : 'badge-purple';
 
                       const gameEnv = p.opponent
                         ? `<b>${p.team}</b> ${p.isHome ? 'vs' : '@'} ${p.opponent} <span class="mono" style="color:var(--accent-cyan);">(${fmtNum(p.teamImpliedPts, 1)} imp pts | O/U ${fmtNum(p.vegasTotal, 1)})</span>`
@@ -1145,8 +1172,9 @@
                             <div style="font-weight:700;">${p.fullName}</div>
                             <div style="font-size:11px; color:var(--text-muted);">${p.team} • ${p.position}</div>
                           </td>
+                          <td><span class="badge ${srcBadgeClass}">${p.marketSourceLabel || 'Market'}</span></td>
                           <td style="font-size:12px;">${gameEnv}</td>
-                          <td class="mono" style="font-size:11.5px;">${propSummary}</td>
+                          <td class="mono" style="font-size:11.5px;">${propSummary || '—'}</td>
                           <td class="mono">${fmtNum(p.sleeperProj)}</td>
                           <td class="mono" style="color:var(--accent-teal); font-weight:600;">${p.sportsbookProj !== null && p.sportsbookProj !== undefined ? fmtNum(p.sportsbookProj) : '—'}</td>
                           <td class="mono" style="font-weight:800; color:var(--accent-cyan); font-size:13.5px;">${fmtNum(p.improvedProj)}</td>
@@ -1767,7 +1795,7 @@
       }
 
       // =========================================================================
-      // TAB 4: SPORTSBOOK PROPS & VEGAS GAME ENVIRONMENT EXPLORER
+      // TAB 4: UNDERDOG & SPORTSBOOK PROPS & VEGAS GAME ENVIRONMENT EXPLORER
       // =========================================================================
       function renderPropsTab() {
         const container = document.getElementById('tab-props');
@@ -1779,8 +1807,8 @@
         container.innerHTML = `
           <div class="card">
             <div class="card-title">
-              <span>📊 Full Roster Sportsbook Player Props, Vegas Implied Totals & Sleeper CFTC Markets (${roster.teamName})</span>
-              <span class="badge badge-cyan">Market Weight: ${Math.round(selectedMarketWeight * 100)}%</span>
+              <span>📊 Full Roster Underdog Fantasy Props (All Games + IDP), OWS Sportsbook & Vegas/CFTC Implied Totals (${roster.teamName})</span>
+              <span class="badge badge-cyan">Source: ${selectedMarketSource.toUpperCase()} • Weight: ${Math.round(selectedMarketWeight * 100)}%</span>
             </div>
             <div class="table-wrap">
               <table>
@@ -1788,14 +1816,16 @@
                   <tr>
                     <th>Status</th>
                     <th>Player</th>
+                    <th>Active Market Source</th>
                     <th>Matchup & Vegas Total</th>
                     <th>Team Implied Pts</th>
-                    <th>Pass Props</th>
-                    <th>Rush Props</th>
-                    <th>Rec Props</th>
+                    <th>Pass / IDP Tackles</th>
+                    <th>Rush / IDP Sacks</th>
+                    <th>Rec / IDP INTs</th>
                     <th>Anytime TD %</th>
                     <th>Sleeper Proj</th>
-                    <th>Sportsbook Proj</th>
+                    <th>Underdog Proj</th>
+                    <th>OWS / Vegas Proj</th>
                     <th>Blended Proj</th>
                   </tr>
                 </thead>
@@ -1803,7 +1833,23 @@
                   ${allPlayers
                     .map((p) => {
                       const sb = p.sportsbookProps;
-                      const isStarter = p.slot !== 'BN';
+                      const isIdp = ['DL', 'LB', 'DB'].includes(p.canonicalPos);
+                      const srcBadgeClass = (p.marketSourceLabel || '').includes('Underdog')
+                        ? 'badge-green'
+                        : (p.marketSourceLabel || '').includes('Sportsbook')
+                        ? 'badge-cyan'
+                        : 'badge-purple';
+
+                      const col1 = isIdp
+                        ? (sb && sb.tackles > 0 ? `${sb.tackles} Tkl+Ast` : '—')
+                        : (sb && sb.passYds > 0 ? `${sb.passYds} yd / ${sb.passTd} TD` : '—');
+                      const col2 = isIdp
+                        ? (sb && sb.sacks > 0 ? `${sb.sacks} Sack` : '—')
+                        : (sb && sb.rushYds > 0 ? `${sb.rushYds} yd` : '—');
+                      const col3 = isIdp
+                        ? (sb && sb.defInts > 0 ? `${sb.defInts} INT` : '—')
+                        : (sb && sb.rec > 0 ? `${sb.rec} rec / ${sb.recYds} yd` : '—');
+
                       return `
                         <tr>
                           <td><span class="pos-pill pos-${p.slot}">${p.slot}</span></td>
@@ -1811,16 +1857,18 @@
                             <div style="font-weight:700;">${p.fullName}</div>
                             <div style="font-size:11px; color:var(--text-muted);">${p.team} • ${p.position}</div>
                           </td>
+                          <td><span class="badge ${srcBadgeClass}">${p.marketSourceLabel || 'Market'}</span></td>
                           <td class="mono" style="font-size:11.5px;">
                             ${p.opponent ? `${p.team} ${p.isHome ? 'vs' : '@'} ${p.opponent} (O/U ${fmtNum(p.vegasTotal, 1)})` : 'BYE'}
                           </td>
                           <td class="mono" style="color:var(--accent-cyan); font-weight:700;">${p.teamImpliedPts ? fmtNum(p.teamImpliedPts, 1) : '—'}</td>
-                          <td class="mono" style="font-size:11.5px;">${sb && sb.passYds > 0 ? `${sb.passYds} yd / ${sb.passTd} TD` : '—'}</td>
-                          <td class="mono" style="font-size:11.5px;">${sb && sb.rushYds > 0 ? `${sb.rushYds} yd` : '—'}</td>
-                          <td class="mono" style="font-size:11.5px;">${sb && sb.rec > 0 ? `${sb.rec} rec / ${sb.recYds} yd` : '—'}</td>
+                          <td class="mono" style="font-size:11.5px;">${col1}</td>
+                          <td class="mono" style="font-size:11.5px;">${col2}</td>
+                          <td class="mono" style="font-size:11.5px;">${col3}</td>
                           <td class="mono" style="font-size:11.5px; color:#4ade80;">${sb && sb.anytimeTdProb > 0 ? fmtPct(sb.anytimeTdProb) : '—'}</td>
                           <td class="mono">${fmtNum(p.sleeperProj)}</td>
-                          <td class="mono" style="color:var(--accent-teal); font-weight:700;">${p.sportsbookProj !== null && p.sportsbookProj !== undefined ? fmtNum(p.sportsbookProj) : '—'}</td>
+                          <td class="mono" style="color:#4ade80; font-weight:700;">${p.underdogProj !== null && p.underdogProj !== undefined ? fmtNum(p.underdogProj) : '—'}</td>
+                          <td class="mono" style="color:var(--accent-teal); font-weight:600;">${p.owsSportsbookProj !== null && p.owsSportsbookProj !== undefined ? `${fmtNum(p.owsSportsbookProj)} (OWS)` : (p.vegasMarketProj ? `${fmtNum(p.vegasMarketProj)} (Vegas)` : '—')}</td>
                           <td class="mono" style="font-weight:800; color:var(--accent-cyan);">${fmtNum(p.improvedProj)}</td>
                         </tr>
                       `;
