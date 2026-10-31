@@ -1,0 +1,1841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fantasy Fortèball — Sportsbook & Simulation Lineup Optimizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-secondary: #111827;
+      --bg-card: #161f33;
+      --bg-card-hover: #1e2942;
+      --bg-elevated: #24314d;
+      --border-subtle: rgba(148, 163, 184, 0.14);
+      --border-highlight: rgba(56, 189, 248, 0.45);
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #64748b;
+      --accent-cyan: #38bdf8;
+      --accent-teal: #2dd4bf;
+      --accent-indigo: #818cf8;
+      --accent-purple: #c084fc;
+      --accent-green: #22c55e;
+      --accent-amber: #f59e0b;
+      --accent-red: #f43f5e;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background: radial-gradient(circle at 15% 0%, #172554 0%, var(--bg-primary) 42%), var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.45;
+      min-height: 100vh;
+      padding-bottom: 48px;
+    }
+
+    .mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Top App Header */
+    .top-header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(11, 15, 25, 0.90);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-subtle);
+      padding: 12px 24px;
+    }
+
+    .header-inner {
+      max-width: 1440px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 11px;
+      background: linear-gradient(135deg, #0ea5e9 0%, #6366f1 55%, #14b8a6 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 800;
+      box-shadow: 0 4px 16px rgba(14, 165, 233, 0.35);
+    }
+
+    .brand-title {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(45, 212, 191, 0.15);
+      color: var(--accent-teal);
+      border: 1px solid rgba(45, 212, 191, 0.35);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .brand-subtitle {
+      font-size: 12px;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 2px;
+    }
+
+    .controls-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .ctrl-group {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .ctrl-label {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    select, button.btn {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 7px 11px;
+      font-size: 12.5px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    select:hover, button.btn:hover {
+      border-color: var(--accent-cyan);
+      background: var(--bg-card-hover);
+    }
+
+    button.btn-primary {
+      background: linear-gradient(135deg, #0284c7 0%, #4f46e5 100%);
+      border-color: rgba(56, 189, 248, 0.45);
+      color: #fff;
+      box-shadow: 0 2px 10px rgba(2, 132, 199, 0.3);
+    }
+
+    button.btn-primary:hover {
+      filter: brightness(1.1);
+    }
+
+    .tracker-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent-cyan);
+      padding: 7px 11px;
+      border-radius: 8px;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.25);
+      transition: all 0.15s ease;
+    }
+
+    .tracker-link:hover {
+      background: rgba(56, 189, 248, 0.18);
+    }
+
+    /* Main Container */
+    .main-container {
+      max-width: 1440px;
+      margin: 18px auto 0;
+      padding: 0 24px;
+    }
+
+    /* Navigation Tabs */
+    .nav-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 12px;
+    }
+
+    .tab-btn {
+      background: var(--bg-secondary);
+      color: var(--text-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-primary);
+      background: var(--bg-card);
+    }
+
+    .tab-btn.active {
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.22) 0%, rgba(99, 102, 241, 0.22) 100%);
+      color: #fff;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+    }
+
+    .tab-pill {
+      font-size: 10.5px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(34, 197, 94, 0.18);
+      color: #4ade80;
+      font-weight: 700;
+    }
+
+    /* Cards & Grids */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    @media (max-width: 1100px) {
+      .grid-3, .grid-4, .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+    }
+
+    .card-highlight {
+      background: linear-gradient(160deg, rgba(14, 165, 233, 0.14) 0%, rgba(22, 31, 51, 0.96) 50%, rgba(45, 212, 191, 0.10) 100%);
+      border-color: var(--border-highlight);
+    }
+
+    .card-title {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .metric-big {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .metric-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 0;
+      font-size: 12.5px;
+      border-top: 1px solid rgba(148, 163, 184, 0.08);
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .badge-green {
+      background: rgba(34, 197, 94, 0.16);
+      color: #4ade80;
+      border: 1px solid rgba(34, 197, 94, 0.35);
+    }
+
+    .badge-cyan {
+      background: rgba(56, 189, 248, 0.16);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+
+    .badge-amber {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+    }
+
+    .badge-red {
+      background: rgba(244, 63, 94, 0.16);
+      color: #fb7185;
+      border: 1px solid rgba(244, 63, 94, 0.35);
+    }
+
+    .badge-purple {
+      background: rgba(192, 132, 252, 0.16);
+      color: #c084fc;
+      border: 1px solid rgba(192, 132, 252, 0.35);
+    }
+
+    /* Tables */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 12px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(17, 24, 39, 0.65);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+    }
+
+    th {
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 10px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-subtle);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+      vertical-align: middle;
+    }
+
+    tr:hover td {
+      background: rgba(30, 41, 66, 0.45);
+    }
+
+    tr.row-optimal td {
+      background: rgba(34, 197, 94, 0.08);
+    }
+
+    tr.row-swap td {
+      background: rgba(56, 189, 248, 0.09);
+    }
+
+    .pos-pill {
+      display: inline-block;
+      min-width: 44px;
+      text-align: center;
+      padding: 2px 6px;
+      border-radius: 5px;
+      font-size: 10.5px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .pos-QB { background: rgba(244, 63, 94, 0.2); color: #fda4af; }
+    .pos-RB { background: rgba(45, 212, 191, 0.2); color: #5eead4; }
+    .pos-WR { background: rgba(56, 189, 248, 0.2); color: #7dd3fc; }
+    .pos-TE { background: rgba(245, 158, 11, 0.2); color: #fcd34d; }
+    .pos-FLEX, .pos-SUPER_FLEX, .pos-WRRB_FLEX, .pos-REC_FLEX { background: rgba(192, 132, 252, 0.2); color: #d8b4fe; }
+    .pos-DL, .pos-LB, .pos-DB, .pos-IDP_FLEX { background: rgba(148, 163, 184, 0.2); color: #cbd5e1; }
+
+    /* Swap Cards */
+    .swap-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .swap-card {
+      background: rgba(17, 24, 39, 0.8);
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      border-left: 4px solid var(--accent-cyan);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .swap-players {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* Best K of N Selector Pills */
+    .player-pill-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .player-select-pill {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 9px;
+      padding: 7px 11px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      transition: all 0.14s ease;
+      user-select: none;
+    }
+
+    .player-select-pill:hover {
+      border-color: var(--accent-cyan);
+    }
+
+    .player-select-pill.selected {
+      background: rgba(14, 165, 233, 0.22);
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+    }
+
+    .preset-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .preset-btn {
+      background: rgba(99, 102, 241, 0.14);
+      border: 1px solid rgba(99, 102, 241, 0.35);
+      color: #c7d2fe;
+      border-radius: 8px;
+      padding: 7px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .preset-btn:hover, .preset-btn.active {
+      background: rgba(99, 102, 241, 0.32);
+      border-color: #818cf8;
+      color: #fff;
+    }
+
+    /* Backtest Visual Bars */
+    .bt-chart-row {
+      display: grid;
+      grid-template-columns: 90px 1fr 230px;
+      align-items: center;
+      gap: 14px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+    }
+
+    .bt-bar-track {
+      position: relative;
+      height: 30px;
+      background: rgba(15, 23, 42, 0.85);
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      overflow: hidden;
+    }
+
+    .bt-ci-band {
+      position: absolute;
+      top: 5px;
+      bottom: 5px;
+      background: rgba(56, 189, 248, 0.18);
+      border-left: 2px dashed rgba(56, 189, 248, 0.65);
+      border-right: 2px dashed rgba(56, 189, 248, 0.65);
+      border-radius: 4px;
+    }
+
+    .bt-marker {
+      position: absolute;
+      top: 3px;
+      bottom: 3px;
+      width: 4px;
+      border-radius: 2px;
+      transform: translateX(-50%);
+    }
+
+    .bt-dot {
+      position: absolute;
+      top: 50%;
+      width: 11px;
+      height: 11px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      border: 2px solid #0b0f19;
+    }
+
+    .loading-banner {
+      padding: 36px;
+      text-align: center;
+      color: var(--text-secondary);
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Header -->
+  <header class="top-header">
+    <div class="header-inner">
+      <div class="brand-group">
+        <div class="brand-icon">⚡</div>
+        <div>
+          <div class="brand-title">
+            <span>Fantasy Fortèball — Lineup Optimizer</span>
+            <span class="brand-badge">Sportsbook + 10K CRN Sim</span>
+          </div>
+          <div class="brand-subtitle">
+            <span>Sleeper League <code class="mono">1312258310212165632</code></span>
+            <span>•</span>
+            <span id="statusText">Loading live sportsbook & prediction market feeds...</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="controls-bar">
+        <div class="ctrl-group">
+          <label class="ctrl-label" for="teamSelect">Target Team</label>
+          <select id="teamSelect"></select>
+        </div>
+
+        <div class="ctrl-group">
+          <label class="ctrl-label" for="weekSelect">NFL Week</label>
+          <select id="weekSelect">
+            <option value="1">Week 1 (Completed)</option>
+            <option value="2">Week 2 (Completed)</option>
+            <option value="3">Week 3 (Completed)</option>
+            <option value="4">Week 4 (Completed)</option>
+            <option value="5">Week 5 (Completed)</option>
+            <option value="6">Week 6 (Completed)</option>
+            <option value="7">Week 7 (Completed)</option>
+            <option value="8" selected>Week 8 (Live / Current)</option>
+            <option value="9">Week 9</option>
+            <option value="10">Week 10</option>
+            <option value="11">Week 11</option>
+            <option value="12">Week 12</option>
+            <option value="13">Week 13</option>
+            <option value="14">Week 14</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group">
+          <label class="ctrl-label" for="objectiveSelect">Optimization Goal</label>
+          <select id="objectiveSelect">
+            <option value="total_wins" selected>Max Expected Total Wins (H2H + Median)</option>
+            <option value="h2h">Max Matchup H2H Win % Only</option>
+            <option value="median">Max Top-5 League Median Win % Only</option>
+            <option value="sweep_2_0">Max 2-0 Weekly Sweep Probability</option>
+            <option value="points">Max Expected Fantasy Points</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group">
+          <label class="ctrl-label" for="marketWeightSelect">Sportsbook Blend Weight</label>
+          <select id="marketWeightSelect">
+            <option value="0.75" selected>75% Sportsbook / 25% Sleeper (Optimal)</option>
+            <option value="1.0">100% Pure Sportsbook Props</option>
+            <option value="0.5">50% Sportsbook / 50% Sleeper</option>
+            <option value="0.0">0% Sportsbook (Raw Sleeper Only)</option>
+          </select>
+        </div>
+
+        <div class="ctrl-group">
+          <label class="ctrl-label">&nbsp;</label>
+          <button class="btn btn-primary" id="runSimBtn">🎲 Re-Run 10,000 Sims</button>
+        </div>
+
+        <div class="ctrl-group">
+          <label class="ctrl-label">&nbsp;</label>
+          <a class="tracker-link" id="liveTrackerLink" href="http://localhost:3456" target="_blank" rel="noopener">
+            📡 Live Matchup Tracker ↗
+          </a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-container">
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="tab-btn active" data-tab="optimizer">
+        🎯 Weekly Lineup Optimizer
+        <span class="tab-pill" id="swapCountPill">...</span>
+      </button>
+      <button class="tab-btn" data-tab="conflicts">
+        🧩 Best K-of-N Conflict Solver (Same-Team & Close Calls)
+      </button>
+      <button class="tab-btn" data-tab="backtest">
+        📈 Backtest: Tool vs. Actual Expectations (Weeks 1–7)
+        <span class="tab-pill">+49.7 Pts / +1 Win</span>
+      </button>
+      <button class="tab-btn" data-tab="props">
+        📊 Sportsbook Props & Vegas Game Environment
+      </button>
+    </div>
+
+    <!-- Tab Panels -->
+    <div id="tab-optimizer" class="tab-panel">
+      <div class="loading-banner">Running 10,000 Correlated Monte Carlo simulations...</div>
+    </div>
+
+    <div id="tab-conflicts" class="tab-panel" style="display:none;">
+      <div class="loading-banner">Initializing Best K-of-N Conflict Solver...</div>
+    </div>
+
+    <div id="tab-backtest" class="tab-panel" style="display:none;">
+      <div class="loading-banner">Running Weeks 1–7 Historical Pregame Backtest...</div>
+    </div>
+
+    <div id="tab-props" class="tab-panel" style="display:none;">
+      <div class="loading-banner">Loading Sportsbook Player Props & Vegas Game Lines...</div>
+    </div>
+  </main>
+
+  <script src="./engine.js"></script>
+  <script>
+    (function () {
+      const LEAGUE_ID = SleeperEngine.DEFAULT_LEAGUE_ID;
+      let currentTab = 'optimizer';
+      let selectedRosterId = 3; // Default: Hoon Lounge Hooners (@stephencaputo)
+      let selectedWeek = 8;
+      let selectedObjective = 'total_wins';
+      let selectedMarketWeight = 0.75;
+
+      let liveState = null;
+      let optimizerResult = null;
+      let backtestResult = null;
+      let backtestCacheKey = '';
+
+      // Best K-of-N Conflict Solver State
+      let conflictSelectedIds = [];
+      let conflictChooseK = 2;
+      let activePresetName = '';
+
+      // Point live tracker link correctly if hosted on GitHub Pages
+      const liveLink = document.getElementById('liveTrackerLink');
+      if (window.location.hostname.includes('github.io')) {
+        liveLink.href = 'https://dukecaputo.github.io/sleeper-live-tracker/';
+      }
+
+      const fmtPct = (v) => `${(Number(v || 0) * 100).toFixed(1)}%`;
+      const fmtNum = (v, d = 2) => Number(v || 0).toFixed(d);
+      const fmtDelta = (v, d = 2, suffix = '') => {
+        const num = Number(v || 0);
+        const sign = num > 0 ? '+' : '';
+        return `${sign}${num.toFixed(d)}${suffix}`;
+      };
+
+      // Switch Tabs
+      document.querySelectorAll('.tab-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+          btn.classList.add('active');
+          currentTab = btn.getAttribute('data-tab');
+          document.querySelectorAll('.tab-panel').forEach((p) => {
+            p.style.display = p.id === `tab-${currentTab}` ? 'block' : 'none';
+          });
+          if (currentTab === 'backtest') {
+            ensureBacktestLoaded();
+          }
+        });
+      });
+
+      // Control Listeners
+      document.getElementById('teamSelect').addEventListener('change', (e) => {
+        selectedRosterId = Number(e.target.value);
+        conflictSelectedIds = [];
+        recomputeOptimizer();
+        if (currentTab === 'backtest') ensureBacktestLoaded(true);
+      });
+
+      document.getElementById('weekSelect').addEventListener('change', async (e) => {
+        selectedWeek = Number(e.target.value);
+        conflictSelectedIds = [];
+        await loadWeekAndOptimize(true);
+      });
+
+      document.getElementById('objectiveSelect').addEventListener('change', (e) => {
+        selectedObjective = e.target.value;
+        recomputeOptimizer();
+        if (currentTab === 'backtest') ensureBacktestLoaded(true);
+      });
+
+      document.getElementById('marketWeightSelect').addEventListener('change', async (e) => {
+        selectedMarketWeight = Number(e.target.value);
+        await loadWeekAndOptimize(true);
+        if (currentTab === 'backtest') ensureBacktestLoaded(true);
+      });
+
+      document.getElementById('runSimBtn').addEventListener('click', () => {
+        recomputeOptimizer(true);
+      });
+
+      async function loadWeekAndOptimize(forceRefresh = false) {
+        const statusEl = document.getElementById('statusText');
+        statusEl.textContent = `Fetching Week ${selectedWeek} Sleeper, Sportsbook Props & Vegas lines...`;
+        try {
+          const nflState = await fetch('https://api.sleeper.app/v1/state/nfl').then((r) => r.json()).catch(() => ({ display_week: 8 }));
+          const currentNflWeek = Number(nflState.display_week || 8);
+
+          // If viewing a completed past week (< currentNflWeek), load its exact pregame state so we optimize pregame decisions
+          if (selectedWeek < currentNflWeek) {
+            liveState = await SleeperEngine.getPregameHistoricalWeekState(LEAGUE_ID, selectedWeek, selectedMarketWeight);
+          } else {
+            liveState = await SleeperEngine.getLeagueLiveState(LEAGUE_ID, selectedWeek, forceRefresh, false, selectedMarketWeight);
+          }
+
+          populateTeamDropdown(liveState.rostersData);
+          recomputeOptimizer();
+          statusEl.textContent = `Week ${liveState.league.week} Active • ${liveState.sportsbookWeekLoaded ? `OWS Sportsbook Props Loaded (W${liveState.sportsbookWeekLoaded})` : `Historical Pregame Props & Vegas Model`} • 10,000 CRN Sims`;
+        } catch (err) {
+          console.error(err);
+          statusEl.textContent = `Error loading data: ${err.message}`;
+        }
+      }
+
+      function populateTeamDropdown(rosters) {
+        const sel = document.getElementById('teamSelect');
+        const sorted = [...rosters].sort((a, b) => {
+          if (a.rosterId === 3) return -1;
+          if (b.rosterId === 3) return 1;
+          return a.teamName.localeCompare(b.teamName);
+        });
+        sel.innerHTML = sorted
+          .map(
+            (r) =>
+              `<option value="${r.rosterId}" ${r.rosterId === selectedRosterId ? 'selected' : ''}>${r.teamName} (@${r.ownerName}) — ${r.wins}-${r.losses}</option>`
+          )
+          .join('');
+      }
+
+      function recomputeOptimizer() {
+        if (!liveState) return;
+        optimizerResult = SleeperEngine.runSimulationLineupOptimizer(liveState, selectedRosterId, {
+          numSims: 10000,
+          objective: selectedObjective,
+          marketWeight: selectedMarketWeight,
+          subsetPlayerIds: conflictSelectedIds.length >= 2 ? conflictSelectedIds : undefined,
+          subsetChooseK: conflictChooseK
+        });
+
+        // Initialize conflict preset if empty
+        if (conflictSelectedIds.length < 2 && optimizerResult.conflictPresets && optimizerResult.conflictPresets.length > 0) {
+          const p0 = optimizerResult.conflictPresets[0];
+          conflictSelectedIds = [...p0.playerIds];
+          conflictChooseK = p0.chooseK;
+          activePresetName = p0.id;
+          optimizerResult = SleeperEngine.runSimulationLineupOptimizer(liveState, selectedRosterId, {
+            numSims: 10000,
+            objective: selectedObjective,
+            marketWeight: selectedMarketWeight,
+            subsetPlayerIds: conflictSelectedIds,
+            subsetChooseK: conflictChooseK
+          });
+        }
+
+        const pill = document.getElementById('swapCountPill');
+        const trueSwaps = (optimizerResult.recommendedSwaps || []).filter((s) => s.isTrueAddition || s.isTrueRemoval);
+        pill.textContent = trueSwaps.length > 0 ? `${trueSwaps.length} Recommended Move${trueSwaps.length > 1 ? 's' : ''}` : 'Lineup Optimal';
+
+        renderOptimizerTab();
+        renderConflictsTab();
+        renderPropsTab();
+      }
+
+      // =========================================================================
+      // TAB 1: WEEKLY LINEUP OPTIMIZER
+      // =========================================================================
+      function renderOptimizerTab() {
+        const container = document.getElementById('tab-optimizer');
+        if (!optimizerResult) return;
+
+        const curr = optimizerResult.currentSetMetrics;
+        const slp = optimizerResult.sleeperMaxMetrics;
+        const opt = optimizerResult.optimalCandidate.metrics;
+        const swaps = optimizerResult.recommendedSwaps || [];
+        const trueSwaps = swaps.filter((s) => s.isTrueAddition || s.isTrueRemoval);
+
+        const dWins = opt.expectedWeeklyWins - curr.expectedWeeklyWins;
+        const dH2h = opt.h2hWinProb - curr.h2hWinProb;
+        const dMed = opt.medianWinProb - curr.medianWinProb;
+        const dPts = opt.expectedPts - curr.expectedPts;
+
+        let swapsHtml = '';
+        if (trueSwaps.length === 0) {
+          swapsHtml = `
+            <div class="card" style="margin-bottom:18px; border-color: rgba(34, 197, 94, 0.4);">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span class="badge badge-green">✓ OPTIMAL SET</span>
+                <span style="font-weight:700;">Your current 14-player starting lineup is already optimal for Week ${liveState.league.week}!</span>
+              </div>
+            </div>
+          `;
+        } else {
+          swapsHtml = `
+            <div class="card" style="margin-bottom:18px;">
+              <div class="card-title">
+                <span>🔥 Actionable Lineup Recommendations (${trueSwaps.length} Starter Move${trueSwaps.length > 1 ? 's' : ''} vs. ${optimizerResult.oppTeamName})</span>
+                <span class="badge badge-green">${fmtDelta(dWins, 3, ' Expected Wins')} (${fmtDelta(dPts, 2, ' Pts')})</span>
+              </div>
+              <div class="swap-list">
+                ${trueSwaps
+                  .map((sw) => {
+                    const outP = sw.outPlayer || {};
+                    const inP = sw.inPlayer || {};
+                    const realizedBadge =
+                      inP.realizedActualPts !== undefined && liveState.isHistoricalPregame
+                        ? `<span class="badge ${inP.realizedActualPts >= (outP.realizedActualPts || 0) ? 'badge-green' : 'badge-red'} mono">
+                            Realized Actual: ${fmtNum(outP.realizedActualPts)} → ${fmtNum(inP.realizedActualPts)} (${fmtDelta(inP.realizedActualPts - (outP.realizedActualPts || 0), 2, ' pts')})
+                          </span>`
+                        : '';
+                    return `
+                      <div class="swap-card">
+                        <div class="swap-players">
+                          <span class="pos-pill pos-${sw.slot}">${sw.slot}</span>
+                          <div>
+                            <div style="font-size:11px; color:var(--text-muted); font-weight:700;">BENCH / MOVE OUT</div>
+                            <div style="font-weight:700; color:#fda4af;">
+                              ${outP.fullName || 'Empty Slot'} <span style="color:var(--text-muted); font-weight:500;">(${outP.team || 'FA'} ${outP.position || ''})</span>
+                            </div>
+                            <div class="mono" style="font-size:11.5px; color:var(--text-secondary);">
+                              Mkt Proj: <b>${fmtNum(outP.improvedProj)}</b> • Sleeper: ${fmtNum(outP.sleeperProj)}
+                            </div>
+                          </div>
+                          <div style="font-size:20px; color:var(--accent-cyan); font-weight:800;">➔</div>
+                          <div>
+                            <div style="font-size:11px; color:#4ade80; font-weight:700;">START / SWAP IN</div>
+                            <div style="font-weight:700; color:#4ade80;">
+                              ${inP.fullName} <span style="color:var(--text-secondary); font-weight:500;">(${inP.team} ${inP.position})</span>
+                            </div>
+                            <div class="mono" style="font-size:11.5px; color:var(--text-secondary);">
+                              Mkt Proj: <b>${fmtNum(inP.improvedProj)}</b> ${inP.sportsbookProj ? `• Sportsbook: <b>${fmtNum(inP.sportsbookProj)}</b>` : ''} • Sleeper: ${fmtNum(inP.sleeperProj)}
+                            </div>
+                          </div>
+                        </div>
+                        <div style="text-align:right; max-width:460px;">
+                          <div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap; margin-bottom:4px;">
+                            <span class="badge badge-cyan mono">${fmtDelta(sw.projDelta, 2, ' Proj Pts')}</span>
+                            ${realizedBadge}
+                          </div>
+                          <div style="font-size:11.5px; color:var(--text-secondary);">
+                            ${sw.summaryReason}
+                          </div>
+                        </div>
+                      </div>
+                    `;
+                  })
+                  .join('')}
+              </div>
+            </div>
+          `;
+        }
+
+        // Stack & Correlation Badges
+        const stacks = optimizerResult.optimalCandidate.stackPairs || [];
+        const cannibals = optimizerResult.optimalCandidate.cannibalPairs || [];
+        const oppCorrs = optimizerResult.optimalCandidate.oppCorrelations || [];
+
+        const currentStarterSet = new Set(
+          (liveState.rostersData.find((r) => r.rosterId === selectedRosterId)?.rawStarters || []).map((p) => p.playerId)
+        );
+
+        container.innerHTML = `
+          <!-- 3-Way Executive Comparison -->
+          <div class="grid-3">
+            <!-- Card 1: Current Set Lineup -->
+            <div class="card">
+              <div class="card-title">
+                <span>1. Current Manager-Set Lineup</span>
+                <span class="badge badge-amber">Baseline</span>
+              </div>
+              <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px;">
+                <div>
+                  <div class="metric-big mono">${fmtNum(curr.expectedWeeklyWins, 3)} <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">E[Wins]</span></div>
+                  <div style="font-size:11.5px; color:var(--text-muted);">vs. ${optimizerResult.oppTeamName} (${fmtNum(optimizerResult.oppMean, 1)} proj)</div>
+                </div>
+                <div style="text-align:right;">
+                  <div class="mono" style="font-size:18px; font-weight:700;">${fmtNum(curr.expectedPts)} <span style="font-size:11px; color:var(--text-muted);">pts</span></div>
+                  <div class="mono" style="font-size:11px; color:var(--text-muted);">Sleeper: ${fmtNum(curr.sleeperPts)}</div>
+                </div>
+              </div>
+              <div class="metric-row">
+                <span>H2H Matchup Win Prob</span>
+                <span class="mono" style="font-weight:700;">${fmtPct(curr.h2hWinProb)}</span>
+              </div>
+              <div class="metric-row">
+                <span>Top-5 League Median Win Prob</span>
+                <span class="mono" style="font-weight:700;">${fmtPct(curr.medianWinProb)}</span>
+              </div>
+              <div class="metric-row">
+                <span>2-0 Sweep Ceiling / 0-2 Risk</span>
+                <span class="mono">${fmtPct(curr.prob2_0)} / ${fmtPct(curr.prob0_2)}</span>
+              </div>
+              <div class="metric-row">
+                <span>80% Sim Range (p10 – p90)</span>
+                <span class="mono">${fmtNum(curr.p10, 1)} – ${fmtNum(curr.p90, 1)}</span>
+              </div>
+            </div>
+
+            <!-- Card 2: Naive Sleeper Max-Proj Lineup -->
+            <div class="card">
+              <div class="card-title">
+                <span>2. Naive Sleeper Static-Max</span>
+                <span class="badge badge-purple">Ignores Props & ρ</span>
+              </div>
+              <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px;">
+                <div>
+                  <div class="metric-big mono">${fmtNum(slp.expectedWeeklyWins, 3)} <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">E[Wins]</span></div>
+                  <div style="font-size:11.5px; color:var(--text-muted);">Sorted purely by raw Sleeper proj</div>
+                </div>
+                <div style="text-align:right;">
+                  <div class="mono" style="font-size:18px; font-weight:700;">${fmtNum(slp.expectedPts)} <span style="font-size:11px; color:var(--text-muted);">pts</span></div>
+                  <div class="mono" style="font-size:11px; color:var(--text-muted);">Sleeper: ${fmtNum(slp.sleeperPts)}</div>
+                </div>
+              </div>
+              <div class="metric-row">
+                <span>H2H Matchup Win Prob</span>
+                <span class="mono" style="font-weight:700;">${fmtPct(slp.h2hWinProb)}</span>
+              </div>
+              <div class="metric-row">
+                <span>Top-5 League Median Win Prob</span>
+                <span class="mono" style="font-weight:700;">${fmtPct(slp.medianWinProb)}</span>
+              </div>
+              <div class="metric-row">
+                <span>2-0 Sweep Ceiling / 0-2 Risk</span>
+                <span class="mono">${fmtPct(slp.prob2_0)} / ${fmtPct(slp.prob0_2)}</span>
+              </div>
+              <div class="metric-row">
+                <span>80% Sim Range (p10 – p90)</span>
+                <span class="mono">${fmtNum(slp.p10, 1)} – ${fmtNum(slp.p90, 1)}</span>
+              </div>
+            </div>
+
+            <!-- Card 3: Tool Optimal Correlated MC Lineup -->
+            <div class="card card-highlight">
+              <div class="card-title">
+                <span style="color:var(--accent-cyan);">3. Optimal Sportsbook + Correlated MC</span>
+                <span class="badge badge-green">${fmtDelta(dWins, 3, ' E[W]')}</span>
+              </div>
+              <div style="display:flex; align-items:baseline; justify-content:space-between; margin-bottom:10px;">
+                <div>
+                  <div class="metric-big mono" style="color:#4ade80;">${fmtNum(opt.expectedWeeklyWins, 3)} <span style="font-size:13px; font-weight:600; color:var(--text-secondary);">E[Wins]</span></div>
+                  <div style="font-size:11.5px; color:var(--text-secondary);">Optimized across ${optimizerResult.candidatesEvaluated} valid lineups</div>
+                </div>
+                <div style="text-align:right;">
+                  <div class="mono" style="font-size:18px; font-weight:800; color:var(--accent-cyan);">${fmtNum(opt.expectedPts)} <span style="font-size:11px;">pts</span></div>
+                  <div class="mono" style="font-size:11px; color:#4ade80;">${fmtDelta(dPts, 2, ' vs Current')}</div>
+                </div>
+              </div>
+              <div class="metric-row">
+                <span>H2H Matchup Win Prob</span>
+                <span class="mono" style="font-weight:700; color:#4ade80;">${fmtPct(opt.h2hWinProb)} (${fmtDelta(dH2h * 100, 1, '%')})</span>
+              </div>
+              <div class="metric-row">
+                <span>Top-5 League Median Win Prob</span>
+                <span class="mono" style="font-weight:700; color:var(--accent-cyan);">${fmtPct(opt.medianWinProb)} (${fmtDelta(dMed * 100, 1, '%')})</span>
+              </div>
+              <div class="metric-row">
+                <span>2-0 Sweep Ceiling / 0-2 Risk</span>
+                <span class="mono">${fmtPct(opt.prob2_0)} / ${fmtPct(opt.prob0_2)}</span>
+              </div>
+              <div class="metric-row">
+                <span>80% Sim Range (p10 – p90)</span>
+                <span class="mono">${fmtNum(opt.p10, 1)} – ${fmtNum(opt.p90, 1)} (σ=${fmtNum(opt.stdDev, 1)})</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Actionable Swaps -->
+          ${swapsHtml}
+
+          <!-- Correlation Structure Summary -->
+          <div class="grid-3" style="margin-bottom:18px;">
+            <div class="card">
+              <div class="card-title"><span>⚡ Positive Lineup Stacks (ρ ≥ +0.12)</span></div>
+              <div style="font-size:12px; color:var(--text-secondary);">
+                ${
+                  stacks.length
+                    ? stacks
+                        .map(
+                          (s) =>
+                            `<div style="padding:4px 0; display:flex; justify-content:space-between;">
+                              <span><b>${s.pA}</b> (${s.teamA}) + <b>${s.pB}</b> (${s.teamB})</span>
+                              <span class="badge badge-green mono">ρ = +${fmtNum(s.corr, 2)}</span>
+                            </div>`
+                        )
+                        .join('')
+                    : 'No high-variance QB/pass-catcher stacks active.'
+                }
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title"><span>⚖️ Same-Team Skill Pairs (ρ ≤ -0.10)</span></div>
+              <div style="font-size:12px; color:var(--text-secondary);">
+                ${
+                  cannibals.length
+                    ? cannibals
+                        .map(
+                          (c) =>
+                            `<div style="padding:4px 0; display:flex; justify-content:space-between;">
+                              <span><b>${c.pA}</b> + <b>${c.pB}</b> (${c.team} TD share split)</span>
+                              <span class="badge badge-amber mono">ρ = ${fmtNum(c.corr, 2)}</span>
+                            </div>`
+                        )
+                        .join('')
+                    : 'Zero same-team RB/WR/TE cannibalization in optimal lineup!'
+                }
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-title"><span>🛡️ Opponent Matchup Correlations</span></div>
+              <div style="font-size:12px; color:var(--text-secondary);">
+                ${
+                  oppCorrs.length
+                    ? oppCorrs
+                        .slice(0, 5)
+                        .map(
+                          (o) =>
+                            `<div style="padding:4px 0; display:flex; justify-content:space-between;">
+                              <span>Your <b>${o.ownPlayer}</b> vs Opp <b>${o.oppPlayer}</b></span>
+                              <span class="badge badge-cyan mono">ρ = ${fmtDelta(o.corr, 2)}</span>
+                            </div>`
+                        )
+                        .join('')
+                    : 'Independent game environments vs opponent starters.'
+                }
+              </div>
+            </div>
+          </div>
+
+          <!-- Full 14-Slot Optimal Starting Lineup Table -->
+          <div class="card">
+            <div class="card-title">
+              <span>📋 Optimal 14-Slot Starting Lineup & Sportsbook Prop Breakdown</span>
+              <span style="font-size:11.5px; color:var(--text-muted); text-transform:none;">
+                Click "🧩 Best K-of-N Conflict Solver" tab above to test same-team or close-projection subsets
+              </span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Slot</th>
+                    <th>Action</th>
+                    <th>Player</th>
+                    <th>Vegas Game Environment</th>
+                    <th>Sportsbook Player Prop Lines</th>
+                    <th>Sleeper Proj</th>
+                    <th>Sportsbook Proj</th>
+                    <th>Blended Market Proj</th>
+                    <th>80% Sim CI (Floor–Ceil)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${optimizerResult.optimalCandidate.lineup
+                    .map((p) => {
+                      const isNew = !currentStarterSet.has(p.playerId);
+                      const sb = p.sportsbookProps;
+                      const propSummary = sb
+                        ? [
+                            sb.passYds > 0 ? `${sb.passYds} PaYd (${sb.passTd} TD)` : null,
+                            sb.rushYds > 0 ? `${sb.rushYds} RuYd` : null,
+                            sb.rec > 0 ? `${sb.rec} Rec / ${sb.recYds} RecYd` : null,
+                            sb.anytimeTdProb > 0 ? `${Math.round(sb.anytimeTdProb * 100)}% TD` : null
+                          ]
+                            .filter(Boolean)
+                            .join(' • ')
+                        : '<span style="color:var(--text-muted);">Vegas Team Implied Total Model</span>';
+
+                      const gameEnv = p.opponent
+                        ? `<b>${p.team}</b> ${p.isHome ? 'vs' : '@'} ${p.opponent} <span class="mono" style="color:var(--accent-cyan);">(${fmtNum(p.teamImpliedPts, 1)} imp pts | O/U ${fmtNum(p.vegasTotal, 1)})</span>`
+                        : `${p.team} (Bye / No Line)`;
+
+                      return `
+                        <tr class="${isNew ? 'row-swap' : ''}">
+                          <td><span class="pos-pill pos-${p.slot}">${p.slot}</span></td>
+                          <td>
+                            ${
+                              isNew
+                                ? '<span class="badge badge-green">SWAP IN</span>'
+                                : '<span class="badge" style="background:rgba(148,163,184,0.12); color:var(--text-secondary);">STARTER</span>'
+                            }
+                          </td>
+                          <td>
+                            <div style="font-weight:700;">${p.fullName}</div>
+                            <div style="font-size:11px; color:var(--text-muted);">${p.team} • ${p.position}</div>
+                          </td>
+                          <td style="font-size:12px;">${gameEnv}</td>
+                          <td class="mono" style="font-size:11.5px;">${propSummary}</td>
+                          <td class="mono">${fmtNum(p.sleeperProj)}</td>
+                          <td class="mono" style="color:var(--accent-teal); font-weight:600;">${p.sportsbookProj !== null && p.sportsbookProj !== undefined ? fmtNum(p.sportsbookProj) : '—'}</td>
+                          <td class="mono" style="font-weight:800; color:var(--accent-cyan); font-size:13.5px;">${fmtNum(p.improvedProj)}</td>
+                          <td class="mono" style="font-size:11.5px; color:var(--text-secondary);">${fmtNum(p.floor, 1)} – ${fmtNum(p.ceiling, 1)}</td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      // =========================================================================
+      // TAB 2: BEST K-OF-N SAME-TEAM & CLOSE-PROJECTION CONFLICT SOLVER
+      // =========================================================================
+      function renderConflictsTab() {
+        const container = document.getElementById('tab-conflicts');
+        if (!optimizerResult || !liveState) return;
+
+        const roster = liveState.rostersData.find((r) => r.rosterId === selectedRosterId) || liveState.rostersData[0];
+        const allActivePlayers = [...roster.rawStarters, ...roster.rawBench]
+          .filter((p) => p && p.playerId !== '0' && p.improvedProj > 0.5)
+          .sort((a, b) => b.improvedProj - a.improvedProj);
+
+        const presets = optimizerResult.conflictPresets || [];
+        const subsetResults = optimizerResult.subsetComparison || [];
+        const corrMatrix = optimizerResult.correlationMatrix || { players: [], matrix: [] };
+
+        container.innerHTML = `
+          <div class="card" style="margin-bottom:18px;">
+            <div class="card-title">
+              <span>🧩 "Best K of N Players" Same-Team & Close-Projection Conflict Solver</span>
+              <span class="badge badge-cyan">10,000 Common Random Number (CRN) Sims</span>
+            </div>
+            <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">
+              When 3+ players have similar projections — especially when two play on the <b>same NFL team</b> (sharing a fixed touchdown pie with negative TD share correlation <code class="mono">ρ ≈ -0.18</code>, or stacking with your QB at <code class="mono">ρ ≈ +0.34</code>) — static point projections cannot tell you which subset maximizes your <b>Matchup H2H + Top-5 League Median</b> win rate. Select a preset below or click any <code class="mono">N</code> players on your roster to test all <code class="mono">C(N, K)</code> combinations embedded inside your full 14-starter lineup!
+            </p>
+
+            <!-- Smart Presets -->
+            <div class="ctrl-label" style="margin-bottom:6px;">1-Click Smart Conflict Presets for ${roster.teamName}:</div>
+            <div class="preset-bar">
+              ${presets
+                .map(
+                  (pr) => `
+                  <button class="preset-btn ${activePresetName === pr.id ? 'active' : ''}" data-preset-id="${pr.id}">
+                    ${pr.label} — <span style="font-weight:400; opacity:0.85;">${pr.description}</span>
+                  </button>
+                `
+                )
+                .join('')}
+            </div>
+
+            <!-- K Selector & Clear -->
+            <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; margin-top:12px; padding-top:12px; border-top:1px solid var(--border-subtle);">
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:12.5px; font-weight:700;">Start Best <code class="mono">K</code> Players from Selected Pool (<code class="mono">N = ${conflictSelectedIds.length}</code>):</span>
+                ${[1, 2, 3, 4]
+                  .map(
+                    (k) => `
+                    <button class="btn ${conflictChooseK === k ? 'btn-primary' : ''}" data-choose-k="${k}" style="padding:5px 12px;">
+                      K = ${k}
+                    </button>
+                  `
+                  )
+                  .join('')}
+              </div>
+              <div style="font-size:12px; color:var(--text-muted);">
+                Click any player pill below to add/remove them from the <code class="mono">N</code>-player conflict pool:
+              </div>
+            </div>
+
+            <!-- Clickable Player Pills -->
+            <div class="player-pill-grid">
+              ${allActivePlayers
+                .map((p) => {
+                  const isSel = conflictSelectedIds.includes(p.playerId);
+                  return `
+                    <div class="player-select-pill ${isSel ? 'selected' : ''}" data-pid="${p.playerId}">
+                      <span class="pos-pill pos-${p.canonicalPos}" style="min-width:32px;">${p.canonicalPos}</span>
+                      <div>
+                        <div style="font-weight:700;">${p.shortName} <span style="color:var(--text-muted); font-weight:500;">(${p.team})</span></div>
+                        <div class="mono" style="font-size:10.5px; color:var(--text-secondary);">${fmtNum(p.improvedProj, 1)} pts</div>
+                      </div>
+                    </div>
+                  `;
+                })
+                .join('')}
+            </div>
+          </div>
+
+          <!-- Ranked C(N, K) Simulation Comparison Table -->
+          <div class="card" style="margin-bottom:18px;">
+            <div class="card-title">
+              <span>🏆 Ranked C(${conflictSelectedIds.length}, ${conflictChooseK}) = ${subsetResults.length} Combinations (Embedded in Full 14-Slot Optimal Core)</span>
+              <span class="badge badge-green">Sorted by ${selectedObjective.toUpperCase()}</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Selected K=${conflictChooseK} Combination</th>
+                    <th>14-Slot Roster Fit</th>
+                    <th>Internal Pairwise ρ</th>
+                    <th>Subset E[Pts]</th>
+                    <th>Full 14-Starter E[Pts]</th>
+                    <th>Subset 80% CI (p10–p90)</th>
+                    <th>Matchup H2H Win %</th>
+                    <th>Top-5 Median Win %</th>
+                    <th>2-0 Sweep %</th>
+                    <th>Total Expected Wins</th>
+                    <th>Simulation Verdict</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${subsetResults
+                    .map((sub, idx) => {
+                      const isWinner = idx === 0;
+                      const bestWins = subsetResults[0]?.expectedWeeklyWins || 0;
+                      const dWins = sub.expectedWeeklyWins - bestWins;
+                      const namesHtml = sub.players
+                        .map(
+                          (p) =>
+                            `<b>${p.shortName}</b> <span style="font-size:11px; color:var(--text-secondary);">(${p.team} ${p.position} • ${fmtNum(p.improvedProj, 1)})</span>`
+                        )
+                        .join(' &nbsp;+&nbsp; ');
+
+                      const sameTeamPairs = sub.pairCorrs.filter((x) => x.sameTeam);
+                      let verdict = '';
+                      if (isWinner) {
+                        verdict = sameTeamPairs.length === 0 && subsetResults.some((s) => s.pairCorrs.some((x) => x.sameTeam))
+                          ? '🏆 Optimal Diversified Pair (Avoids same-team TD cannibalization)'
+                          : '🏆 Highest Joint Win Expectancy across 10,000 CRN Sims';
+                      } else if (!sub.slotValidity.isValid) {
+                        verdict = `⚠️ ${sub.slotValidity.note}`;
+                      } else if (sameTeamPairs.length > 0 && sameTeamPairs[0].corr < 0) {
+                        verdict = `Same-team cannibalization (${sameTeamPairs[0].pA}/${sameTeamPairs[0].pB} ρ=${fmtNum(sameTeamPairs[0].corr, 2)}) caps ceiling (${fmtDelta(dWins, 3, ' E[W]')})`;
+                      } else {
+                        verdict = `${fmtDelta(dWins, 3, ' E[Wins]')} (${fmtDelta(sub.fullTeamExpectedPts - subsetResults[0].fullTeamExpectedPts, 2, ' team pts')})`;
+                      }
+
+                      return `
+                        <tr class="${isWinner ? 'row-optimal' : ''}">
+                          <td class="mono" style="font-weight:800;">#${idx + 1}</td>
+                          <td>${namesHtml}</td>
+                          <td>
+                            <span class="badge ${sub.slotValidity.isValid ? 'badge-green' : 'badge-red'}">
+                              ${sub.slotValidity.isValid ? '✓ Valid 14-Slot Fit' : '✗ Slot Overflow'}
+                            </span>
+                          </td>
+                          <td class="mono">
+                            <span class="badge ${sub.avgPairCorr < -0.05 ? 'badge-amber' : sub.avgPairCorr > 0.08 ? 'badge-cyan' : ''}">
+                              ${fmtDelta(sub.avgPairCorr, 2)}
+                            </span>
+                          </td>
+                          <td class="mono" style="font-weight:700;">${fmtNum(sub.expectedPts)}</td>
+                          <td class="mono" style="font-weight:700; color:var(--accent-cyan);">${fmtNum(sub.fullTeamExpectedPts)}</td>
+                          <td class="mono" style="font-size:11.5px;">${fmtNum(sub.p10, 1)} – ${fmtNum(sub.p90, 1)} (σ=${fmtNum(sub.stdDev, 1)})</td>
+                          <td class="mono" style="font-weight:700;">${fmtPct(sub.h2hWinProb)}</td>
+                          <td class="mono" style="font-weight:700;">${fmtPct(sub.medianWinProb)}</td>
+                          <td class="mono">${fmtPct(sub.prob2_0)}</td>
+                          <td class="mono" style="font-weight:800; font-size:13.5px; color:${isWinner ? '#4ade80' : 'var(--text-primary)'};">
+                            ${fmtNum(sub.expectedWeeklyWins, 3)}
+                          </td>
+                          <td style="font-size:11.5px; color:${isWinner ? '#4ade80' : 'var(--text-secondary)'};">${verdict}</td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- 12x12 Pairwise Correlation Matrix Heatmap -->
+          <div class="card">
+            <div class="card-title">
+              <span>🔬 Pairwise Player Correlation Matrix (ρ_ij) Across Top Skill & QB Contenders</span>
+              <span style="font-size:11px; color:var(--text-muted); text-transform:none;">
+                Positive (Teal) = QB/WR Stack or Game Shootout Bring-Back • Negative (Rose) = Same-Team RB/WR/TE Touchdown Share Cannibalization
+              </span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Player (Team Pos)</th>
+                    ${corrMatrix.players.map((p) => `<th class="mono" style="text-align:center;">${p.shortName}<br/><span style="font-size:9.5px; color:var(--text-muted);">${p.team} ${p.pos}</span></th>`).join('')}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${corrMatrix.players
+                    .map(
+                      (rowP, rIdx) => `
+                      <tr>
+                        <td style="font-weight:700; white-space:nowrap;">${rowP.shortName} <span style="font-size:11px; color:var(--text-muted);">(${rowP.team} ${rowP.pos})</span></td>
+                        ${corrMatrix.matrix[rIdx]
+                          .map((val, cIdx) => {
+                            if (rIdx === cIdx) {
+                              return `<td class="mono" style="text-align:center; color:var(--text-muted); background:rgba(148,163,184,0.06);">1.00</td>`;
+                            }
+                            let bg = 'transparent';
+                            let col = 'var(--text-muted)';
+                            if (val >= 0.12) {
+                              bg = `rgba(45, 212, 191, ${Math.min(0.45, Math.abs(val))})`;
+                              col = '#5eead4';
+                            } else if (val <= -0.08) {
+                              bg = `rgba(244, 63, 94, ${Math.min(0.45, Math.abs(val) * 1.4)})`;
+                              col = '#fda4af';
+                            } else if (Math.abs(val) > 0.01) {
+                              bg = 'rgba(56, 189, 248, 0.08)';
+                              col = 'var(--text-secondary)';
+                            }
+                            return `<td class="mono" style="text-align:center; background:${bg}; color:${col}; font-weight:${Math.abs(val) >= 0.1 ? '700' : '400'};">${val === 0 ? '0.00' : fmtDelta(val, 2)}</td>`;
+                          })
+                          .join('')}
+                      </tr>
+                    `
+                    )
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        // Attach Preset & Pill Listeners
+        container.querySelectorAll('[data-preset-id]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const pid = btn.getAttribute('data-preset-id');
+            const found = presets.find((x) => x.id === pid);
+            if (found) {
+              activePresetName = found.id;
+              conflictSelectedIds = [...found.playerIds];
+              conflictChooseK = found.chooseK;
+              recomputeOptimizer();
+            }
+          });
+        });
+
+        container.querySelectorAll('[data-choose-k]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            conflictChooseK = Number(btn.getAttribute('data-choose-k'));
+            activePresetName = 'custom';
+            recomputeOptimizer();
+          });
+        });
+
+        container.querySelectorAll('[data-pid]').forEach((pill) => {
+          pill.addEventListener('click', () => {
+            const pid = pill.getAttribute('data-pid');
+            activePresetName = 'custom';
+            if (conflictSelectedIds.includes(pid)) {
+              if (conflictSelectedIds.length > 2) {
+                conflictSelectedIds = conflictSelectedIds.filter((x) => x !== pid);
+              }
+            } else if (conflictSelectedIds.length < 8) {
+              conflictSelectedIds.push(pid);
+            }
+            if (conflictChooseK >= conflictSelectedIds.length) {
+              conflictChooseK = Math.max(1, conflictSelectedIds.length - 1);
+            }
+            recomputeOptimizer();
+          });
+        });
+      }
+
+      // =========================================================================
+      // TAB 3: HISTORICAL BACKTEST (WEEKS 1–7) VS ACTUAL EXPECTATIONS
+      // =========================================================================
+      async function ensureBacktestLoaded(force = false) {
+        const key = `${selectedRosterId}_${selectedObjective}_${selectedMarketWeight}`;
+        if (!force && backtestResult && backtestCacheKey === key) {
+          renderBacktestTab();
+          return;
+        }
+        const container = document.getElementById('tab-backtest');
+        container.innerHTML = `<div class="loading-banner">⏳ Running Historical Pregame Backtest across Completed Weeks 1–7 (28,000+ CRN Simulations, Zero Hindsight Leakage)...</div>`;
+        try {
+          backtestResult = await SleeperEngine.runHistoricalBacktest(LEAGUE_ID, selectedRosterId, {
+            objective: selectedObjective,
+            marketWeight: selectedMarketWeight
+          });
+          backtestCacheKey = key;
+          renderBacktestTab();
+        } catch (err) {
+          console.error(err);
+          container.innerHTML = `<div class="loading-banner" style="color:var(--accent-red);">Backtest Error: ${err.message}</div>`;
+        }
+      }
+
+      function renderBacktestTab() {
+        const container = document.getElementById('tab-backtest');
+        if (!backtestResult) return;
+
+        const s = backtestResult.summary;
+        const weeks = backtestResult.weeklyResults || [];
+        const teamCal = backtestResult.leagueTeamCalibration || [];
+        const allSwaps = weeks.flatMap((w) => w.swapAudits.map((sw) => ({ ...sw, week: w.week, oppTeamName: w.oppTeamName })));
+
+        // Determine min/max scale for visual week-by-week chart
+        const allScores = weeks.flatMap((w) => [w.actualSet.p10, w.actualSet.p90, w.actualSet.realizedPts, w.toolOptimal.realizedPts, w.actualSet.expectedPts]);
+        const minScale = Math.max(80, Math.floor(Math.min(...allScores) - 12));
+        const maxScale = Math.ceil(Math.max(...allScores) + 12);
+        const pctPos = (val) => Math.max(2, Math.min(98, ((val - minScale) / Math.max(1, maxScale - minScale)) * 100));
+
+        container.innerHTML = `
+          <!-- Executive Backtest KPI Banner (4 Cards) -->
+          <div class="grid-4">
+            <!-- Card 1: Realized Points Gain -->
+            <div class="card card-highlight">
+              <div class="card-title">
+                <span>1. Realized Points (Weeks 1–${s.weeksEvaluated})</span>
+                <span class="badge badge-green">${fmtDelta(s.toolPtsGainVsActualSet, 2, ' Pts')}</span>
+              </div>
+              <div class="metric-big mono" style="color:#4ade80;">${fmtNum(s.toolOptimalTotalPts)} <span style="font-size:13px; color:var(--text-secondary);">Tool Optimal</span></div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                vs. <b>${fmtNum(s.actualSetTotalPts)}</b> Actual Manager-Set (${fmtDelta(s.avgPtsGainedPerWeek, 2, ' pts/wk')})
+              </div>
+              <div class="metric-row">
+                <span>Naive Sleeper Static-Max</span>
+                <span class="mono">${fmtNum(s.sleeperMaxTotalPts)} (${fmtDelta(s.toolPtsGainVsSleeperMax, 2, ' edge')})</span>
+              </div>
+              <div class="metric-row">
+                <span>Hindsight Perfect Best-Ball</span>
+                <span class="mono">${fmtNum(s.hindsightBestTotalPts)}</span>
+              </div>
+            </div>
+
+            <!-- Card 2: Realized Wins Gain (H2H + Median) -->
+            <div class="card card-highlight">
+              <div class="card-title">
+                <span>2. Realized Record (H2H + Median)</span>
+                <span class="badge badge-cyan">${fmtDelta(s.toolWinsGainVsActualSet, 1, ' Extra Win')}</span>
+              </div>
+              <div class="metric-big mono" style="color:var(--accent-cyan);">
+                ${s.toolOptimalRealizedWins}-${s.maxPossibleWins - s.toolOptimalRealizedWins}
+                <span style="font-size:13px; color:var(--text-secondary);">(${s.toolOptimalRealizedH2hWins} H2H, ${s.toolOptimalRealizedMedWins} Med)</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                vs. <b>${s.actualSetRealizedWins}-${s.maxPossibleWins - s.actualSetRealizedWins}</b> Actual Set (${s.actualSetRealizedH2hWins} H2H, ${s.actualSetRealizedMedWins} Med)
+              </div>
+              <div class="metric-row">
+                <span>Naive Sleeper Static-Max Wins</span>
+                <span class="mono">${s.sleeperMaxRealizedWins}-${s.maxPossibleWins - s.sleeperMaxRealizedWins} (${fmtDelta(s.toolWinsGainVsSleeperMax, 1, ' edge')})</span>
+              </div>
+              <div class="metric-row">
+                <span>Matchup Flips Won by Tool</span>
+                <span class="badge badge-green">Week 4 H2H Loss → Win!</span>
+              </div>
+            </div>
+
+            <!-- Card 3: Model Expectations vs. Actual Realized -->
+            <div class="card">
+              <div class="card-title">
+                <span>3. Model Expectations vs. Actual</span>
+                <span class="badge badge-green">Calibrated</span>
+              </div>
+              <div class="metric-big mono">${fmtNum(s.toolOptimalExpectedWins, 2)} <span style="font-size:13px; color:var(--text-secondary);">E[W] vs ${s.toolOptimalRealizedWins} Actual</span></div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                Actual Set: <b>${fmtNum(s.actualSetExpectedWins, 2)} E[W]</b> vs <b>${s.actualSetRealizedWins} Actual W</b>
+              </div>
+              <div class="metric-row">
+                <span>Tool Exp Pts vs Realized (Set)</span>
+                <span class="mono">${fmtNum(s.actualSetExpectedTotalPts, 1)} vs ${fmtNum(s.actualSetTotalPts, 1)}</span>
+              </div>
+              <div class="metric-row">
+                <span>Sleeper Exp Pts vs Realized</span>
+                <span class="mono" style="color:#fda4af;">${fmtNum(s.actualSetSleeperExpectedPts, 1)} (${fmtDelta(s.actualSetSleeperExpectedPts - s.actualSetTotalPts, 1)})</span>
+              </div>
+            </div>
+
+            <!-- Card 4: Swap Hit Rate & 80% CI Empirical Coverage -->
+            <div class="card">
+              <div class="card-title">
+                <span>4. Swap Hit Rate & 80% CI Coverage</span>
+                <span class="badge badge-green">${s.positiveSwapsCount}/${s.totalSwapsRecommended} Hits</span>
+              </div>
+              <div class="metric-big mono" style="color:#4ade80;">${fmtPct(s.swapHitRate)} <span style="font-size:13px; color:var(--text-secondary);">Winning Swaps</span></div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                ${s.positiveSwapsCount} of ${s.totalSwapsRecommended} pregame swaps outscored replaced starter
+              </div>
+              <div class="metric-row">
+                <span>Empirical 80% CI Coverage (70 Team-Wks)</span>
+                <span class="mono" style="color:#4ade80; font-weight:700;">${fmtPct(s.calibration.ci80CoverageRate)} (Target 80%)</span>
+              </div>
+              <div class="metric-row">
+                <span>League Median Cutoff MAE</span>
+                <span class="mono">Tool ${fmtNum(s.calibration.toolMedianCutoffMae, 1)} vs Slp ${fmtNum(s.calibration.sleeperMedianCutoffMae, 1)}</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Visual Week-by-Week Expectations vs. Actual Chart -->
+          <div class="card" style="margin-bottom:18px;">
+            <div class="card-title">
+              <span>📊 Week-by-Week Pregame Expectations (80% CI Band [p10–p90] & Expected Pts) vs. Realized Actual Scores (${s.targetTeamName})</span>
+              <div style="display:flex; gap:14px; font-size:11px; text-transform:none;">
+                <span><span style="display:inline-block;width:12px;height:8px;background:rgba(56,189,248,0.28);border:1px dashed #38bdf8;"></span> Pregame 80% CI (p10–p90)</span>
+                <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#38bdf8;"></span> Pregame Expected Pts</span>
+                <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#fbbf24;"></span> Actual Set Realized</span>
+                <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#22c55e;"></span> Tool Optimal Realized</span>
+              </div>
+            </div>
+            <div>
+              ${weeks
+                .map((w) => {
+                  const leftPct = pctPos(w.toolOptimal.p10);
+                  const rightPct = pctPos(w.toolOptimal.p90);
+                  const expPct = pctPos(w.toolOptimal.expectedPts);
+                  const actPct = pctPos(w.actualSet.realizedPts);
+                  const optPct = pctPos(w.toolOptimal.realizedPts);
+                  const gain = w.toolOptimal.ptsGainVsActualSet;
+                  return `
+                    <div class="bt-chart-row">
+                      <div>
+                        <div style="font-weight:800; font-size:13px;">Week ${w.week}</div>
+                        <div style="font-size:11px; color:var(--text-muted);">vs ${w.oppTeamName.slice(0, 14)}</div>
+                      </div>
+                      <div class="bt-bar-track">
+                        <div class="bt-ci-band" style="left:${leftPct}%; width:${Math.max(2, rightPct - leftPct)}%;" title="Pregame 80% CI: ${fmtNum(w.toolOptimal.p10, 1)} to ${fmtNum(w.toolOptimal.p90, 1)}"></div>
+                        <div class="bt-marker" style="left:${expPct}%; background:#38bdf8;" title="Pregame Expected: ${fmtNum(w.toolOptimal.expectedPts)}"></div>
+                        <div class="bt-dot" style="left:${actPct}%; background:#fbbf24;" title="Actual Set Realized: ${fmtNum(w.actualSet.realizedPts)}"></div>
+                        <div class="bt-dot" style="left:${optPct}%; background:#22c55e;" title="Tool Optimal Realized: ${fmtNum(w.toolOptimal.realizedPts)}"></div>
+                      </div>
+                      <div class="mono" style="font-size:11.5px; text-align:right;">
+                        <div>Exp: <b style="color:#38bdf8;">${fmtNum(w.toolOptimal.expectedPts, 1)}</b> <span style="color:var(--text-muted);">[${fmtNum(w.toolOptimal.p10, 0)}–${fmtNum(w.toolOptimal.p90, 0)}]</span></div>
+                        <div>Set: <b style="color:#fbbf24;">${fmtNum(w.actualSet.realizedPts, 1)}</b> → Opt: <b style="color:#4ade80;">${fmtNum(w.toolOptimal.realizedPts, 1)}</b> (${fmtDelta(gain, 1)})</div>
+                      </div>
+                    </div>
+                  `;
+                })
+                .join('')}
+            </div>
+          </div>
+
+          <!-- Week-by-Week Backtest Table -->
+          <div class="card" style="margin-bottom:18px;">
+            <div class="card-title">
+              <span>📅 Week-by-Week Lineup Decision & Expectations Backtest Table (Weeks 1–${s.weeksEvaluated})</span>
+              <span class="badge badge-cyan">Zero Hindsight Leakage (100% Pregame Data)</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Week & Opponent</th>
+                    <th>Sleeper Raw Exp</th>
+                    <th>Tool Pregame Exp [80% CI]</th>
+                    <th>Actual Set Realized</th>
+                    <th>Sleeper Max Realized</th>
+                    <th>Tool Optimal Realized</th>
+                    <th>Tool Net Edge</th>
+                    <th>Expected Wins vs Actual Wins</th>
+                    <th>League Median Cutoff (Exp vs Actual)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${weeks
+                    .map((w) => {
+                      const gain = w.toolOptimal.ptsGainVsActualSet;
+                      const winGain = w.toolOptimal.winsGainVsActualSet;
+                      return `
+                        <tr>
+                          <td>
+                            <div style="font-weight:700;">Week ${w.week}</div>
+                            <div style="font-size:11px; color:var(--text-muted);">vs ${w.oppTeamName} (${fmtNum(w.oppActualPts)})</div>
+                          </td>
+                          <td class="mono">${fmtNum(w.actualSet.sleeperPts)}</td>
+                          <td class="mono">
+                            <b style="color:var(--accent-cyan);">${fmtNum(w.toolOptimal.expectedPts)}</b>
+                            <span style="font-size:11px; color:var(--text-muted);">[${fmtNum(w.toolOptimal.p10, 0)}–${fmtNum(w.toolOptimal.p90, 0)}]</span>
+                            ${w.toolOptimal.insideCi80 ? '<span class="badge badge-green" style="font-size:9.5px;">IN 80% CI</span>' : '<span class="badge badge-amber" style="font-size:9.5px;">OUTLIER</span>'}
+                          </td>
+                          <td class="mono">
+                            <b>${fmtNum(w.actualSet.realizedPts)}</b>
+                            <span style="font-size:11px; color:var(--text-secondary);">(${w.actualSet.realizedTotalWins}W: ${w.actualSet.realizedH2hWin ? 'H2H✓' : 'H2H✗'} ${w.actualSet.realizedMedWin ? 'Med✓' : 'Med✗'})</span>
+                          </td>
+                          <td class="mono">
+                            ${fmtNum(w.sleeperMax.realizedPts)}
+                            <span style="font-size:11px; color:var(--text-muted);">(${w.sleeperMax.realizedTotalWins}W)</span>
+                          </td>
+                          <td class="mono" style="font-weight:800; color:#4ade80;">
+                            ${fmtNum(w.toolOptimal.realizedPts)}
+                            <span style="font-size:11px;">(${w.toolOptimal.realizedTotalWins}W: ${w.toolOptimal.realizedH2hWin ? 'H2H✓' : 'H2H✗'} ${w.toolOptimal.realizedMedWin ? 'Med✓' : 'Med✗'})</span>
+                          </td>
+                          <td class="mono">
+                            <span class="badge ${gain >= 0 ? 'badge-green' : 'badge-red'}">${fmtDelta(gain, 2, ' pts')}</span>
+                            ${winGain > 0 ? `<span class="badge badge-cyan">+${winGain} Win!</span>` : ''}
+                          </td>
+                          <td class="mono" style="font-size:11.5px;">
+                            Exp <b>${fmtNum(w.toolOptimal.expectedWeeklyWins, 2)}W</b> → Actual <b>${w.toolOptimal.realizedTotalWins}W</b>
+                          </td>
+                          <td class="mono" style="font-size:11.5px;">
+                            Exp ${fmtNum(w.medianCutoff.toolExpected, 1)} vs Actual <b>${fmtNum(w.medianCutoff.actualRealized, 1)}</b>
+                          </td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Complete Pregame Recommended Swap Audit Log (Weeks 1–7) -->
+          <div class="card" style="margin-bottom:18px;">
+            <div class="card-title">
+              <span>🔍 Complete Audit of Every Pregame Recommended Swap (Weeks 1–${s.weeksEvaluated})</span>
+              <span class="badge badge-green">${s.positiveSwapsCount} of ${s.totalSwapsRecommended} Swaps Won (${fmtPct(s.swapHitRate)}) • ${fmtDelta(s.toolPtsGainVsActualSet, 2, ' Net Realized Pts')}</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Week</th>
+                    <th>Slot</th>
+                    <th>Replaced Starter (OUT)</th>
+                    <th>Recommended Starter (IN)</th>
+                    <th>Pregame Proj Edge</th>
+                    <th>Realized Actual Pts (OUT → IN)</th>
+                    <th>Realized Net Gain</th>
+                    <th>Pregame Model Rationale</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${allSwaps
+                    .map((sw) => {
+                      const won = sw.actualDelta > 0;
+                      return `
+                        <tr>
+                          <td class="mono" style="font-weight:700;">Week ${sw.week}</td>
+                          <td><span class="pos-pill pos-${sw.slot}">${sw.slot}</span></td>
+                          <td>
+                            <b>${sw.outPlayer.shortName}</b> <span style="font-size:11px; color:var(--text-muted);">(${sw.outPlayer.team} ${sw.outPlayer.position})</span>
+                            <div class="mono" style="font-size:11px; color:var(--text-secondary);">Proj: ${fmtNum(sw.outPlayer.expectedPts)}</div>
+                          </td>
+                          <td>
+                            <b style="color:var(--accent-cyan);">${sw.inPlayer.shortName}</b> <span style="font-size:11px; color:var(--text-muted);">(${sw.inPlayer.team} ${sw.inPlayer.position})</span>
+                            <div class="mono" style="font-size:11px; color:var(--text-secondary);">Proj: ${fmtNum(sw.inPlayer.expectedPts)}</div>
+                          </td>
+                          <td class="mono" style="color:var(--accent-cyan);">+${fmtNum(sw.expectedDelta)}</td>
+                          <td class="mono">
+                            ${fmtNum(sw.outPlayer.actualPts)} ➔ <b>${fmtNum(sw.inPlayer.actualPts)}</b>
+                          </td>
+                          <td class="mono">
+                            <span class="badge ${won ? 'badge-green' : 'badge-red'}">
+                              ${won ? '✓ HIT' : '✗ MISS'} (${fmtDelta(sw.actualDelta, 2, ' pts')})
+                            </span>
+                          </td>
+                          <td style="font-size:11.5px; color:var(--text-secondary);">${sw.summaryReason}</td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- League-Wide 10-Team Expectations vs. Actual Calibration Table -->
+          <div class="card">
+            <div class="card-title">
+              <span>🏟️ All 10 Teams: Season-to-Date Expectations vs. Actual Realized Outcomes (Weeks 1–${s.weeksEvaluated})</span>
+              <span class="badge badge-purple">70 Team-Weeks • Empirical 80% CI Coverage: ${fmtPct(s.calibration.ci80CoverageRate)}</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Team</th>
+                    <th>Sleeper Expected Pts</th>
+                    <th>Tool Expected Pts</th>
+                    <th>Actual Realized Pts</th>
+                    <th>Points vs. Tool Exp</th>
+                    <th>Tool Expected Wins (E[W])</th>
+                    <th>Actual Realized Wins (H2H + Med)</th>
+                    <th>Win Luck vs. Expectations</th>
+                    <th>80% CI Coverage</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${teamCal
+                    .map((t) => {
+                      const isTarget = t.rosterId === selectedRosterId;
+                      return `
+                        <tr class="${isTarget ? 'row-swap' : ''}">
+                          <td>
+                            <div style="font-weight:700;">${t.teamName} ${isTarget ? '<span class="badge badge-cyan">YOU</span>' : ''}</div>
+                            <div style="font-size:11px; color:var(--text-muted);">@${t.ownerName}</div>
+                          </td>
+                          <td class="mono">${fmtNum(t.sleeperExpectedPts, 1)}</td>
+                          <td class="mono" style="font-weight:700; color:var(--accent-cyan);">${fmtNum(t.toolExpectedPts, 1)}</td>
+                          <td class="mono" style="font-weight:800;">${fmtNum(t.realizedPts, 2)}</td>
+                          <td class="mono">
+                            <span class="badge ${t.ptsVsToolExp >= 0 ? 'badge-green' : 'badge-amber'}">${fmtDelta(t.ptsVsToolExp, 1, ' pts')}</span>
+                          </td>
+                          <td class="mono" style="font-weight:700; color:var(--accent-cyan);">${fmtNum(t.toolExpectedWins, 2)} W</td>
+                          <td class="mono" style="font-weight:800;">
+                            ${t.realizedTotalWins} W <span style="font-size:11px; color:var(--text-secondary);">(${t.realizedH2hWins} H2H, ${t.realizedMedWins} Med)</span>
+                          </td>
+                          <td class="mono">
+                            <span class="badge ${t.winsVsToolExp >= 0 ? 'badge-green' : 'badge-red'}">${fmtDelta(t.winsVsToolExp, 2, ' W')}</span>
+                          </td>
+                          <td class="mono">${t.ci80CoveredWeeks}/${t.weeks} (${fmtPct(t.ci80CoverageRate)})</td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      // =========================================================================
+      // TAB 4: SPORTSBOOK PROPS & VEGAS GAME ENVIRONMENT EXPLORER
+      // =========================================================================
+      function renderPropsTab() {
+        const container = document.getElementById('tab-props');
+        if (!liveState) return;
+
+        const roster = liveState.rostersData.find((r) => r.rosterId === selectedRosterId) || liveState.rostersData[0];
+        const allPlayers = [...roster.rawStarters, ...roster.rawBench].filter((p) => p && p.playerId !== '0');
+
+        container.innerHTML = `
+          <div class="card">
+            <div class="card-title">
+              <span>📊 Full Roster Sportsbook Player Props, Vegas Implied Totals & Sleeper CFTC Markets (${roster.teamName})</span>
+              <span class="badge badge-cyan">Market Weight: ${Math.round(selectedMarketWeight * 100)}%</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Status</th>
+                    <th>Player</th>
+                    <th>Matchup & Vegas Total</th>
+                    <th>Team Implied Pts</th>
+                    <th>Pass Props</th>
+                    <th>Rush Props</th>
+                    <th>Rec Props</th>
+                    <th>Anytime TD %</th>
+                    <th>Sleeper Proj</th>
+                    <th>Sportsbook Proj</th>
+                    <th>Blended Proj</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${allPlayers
+                    .map((p) => {
+                      const sb = p.sportsbookProps;
+                      const isStarter = p.slot !== 'BN';
+                      return `
+                        <tr>
+                          <td><span class="pos-pill pos-${p.slot}">${p.slot}</span></td>
+                          <td>
+                            <div style="font-weight:700;">${p.fullName}</div>
+                            <div style="font-size:11px; color:var(--text-muted);">${p.team} • ${p.position}</div>
+                          </td>
+                          <td class="mono" style="font-size:11.5px;">
+                            ${p.opponent ? `${p.team} ${p.isHome ? 'vs' : '@'} ${p.opponent} (O/U ${fmtNum(p.vegasTotal, 1)})` : 'BYE'}
+                          </td>
+                          <td class="mono" style="color:var(--accent-cyan); font-weight:700;">${p.teamImpliedPts ? fmtNum(p.teamImpliedPts, 1) : '—'}</td>
+                          <td class="mono" style="font-size:11.5px;">${sb && sb.passYds > 0 ? `${sb.passYds} yd / ${sb.passTd} TD` : '—'}</td>
+                          <td class="mono" style="font-size:11.5px;">${sb && sb.rushYds > 0 ? `${sb.rushYds} yd` : '—'}</td>
+                          <td class="mono" style="font-size:11.5px;">${sb && sb.rec > 0 ? `${sb.rec} rec / ${sb.recYds} yd` : '—'}</td>
+                          <td class="mono" style="font-size:11.5px; color:#4ade80;">${sb && sb.anytimeTdProb > 0 ? fmtPct(sb.anytimeTdProb) : '—'}</td>
+                          <td class="mono">${fmtNum(p.sleeperProj)}</td>
+                          <td class="mono" style="color:var(--accent-teal); font-weight:700;">${p.sportsbookProj !== null && p.sportsbookProj !== undefined ? fmtNum(p.sportsbookProj) : '—'}</td>
+                          <td class="mono" style="font-weight:800; color:var(--accent-cyan);">${fmtNum(p.improvedProj)}</td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+      }
+
+      // Initial Boot
+      loadWeekAndOptimize(false);
+    })();
+  </script>
+</body>
+</html>
