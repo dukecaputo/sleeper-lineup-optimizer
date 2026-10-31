@@ -224,11 +224,11 @@
       padding: 0 24px;
     }
 
-    /* Navigation Tabs — All 5 tabs fit on 1 single line */
+    /* Navigation Tabs — All 6 tabs fit on 1 single line */
     .nav-tabs {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 7px;
       margin-bottom: 16px;
       border-bottom: 1px solid var(--border-subtle);
       padding-bottom: 12px;
@@ -239,8 +239,8 @@
       color: var(--text-secondary);
       border: 1px solid var(--border-subtle);
       border-radius: 10px;
-      padding: 9px 10px;
-      font-size: 12.5px;
+      padding: 9px 8px;
+      font-size: 12px;
       font-weight: 700;
       cursor: pointer;
       display: inline-flex;
@@ -608,6 +608,9 @@
         </div>
 
         <div class="header-actions">
+          <button class="btn" id="syncSleeperBtn" style="border-color:rgba(34, 197, 94, 0.55); background:rgba(34, 197, 94, 0.14); color:#4ade80;">
+            🔄 Sync Sleeper Lineup
+          </button>
           <button class="btn btn-primary" id="runSimBtn">🎲 Re-Run 10,000 Sims</button>
           <a class="tracker-link" id="liveTrackerLink" href="http://localhost:3456" target="_blank" rel="noopener">
             📡 Live Matchup Tracker ↗
@@ -691,12 +694,16 @@
         🏟️ Team Vegas View
         <span class="tab-pill" id="vegasTotalPill">...</span>
       </button>
+      <button class="tab-btn" data-tab="idp">
+        🛡️ IDP Waiver Wire
+        <span class="tab-pill" id="idpUpgradePill">...</span>
+      </button>
       <button class="tab-btn" data-tab="backtest">
         📈 Backtest (W1–W7)
         <span class="tab-pill">+49.7 Pts / +1W</span>
       </button>
       <button class="tab-btn" data-tab="props">
-        📊 Player Props Explorer
+        📊 Player Props
       </button>
     </div>
 
@@ -711,6 +718,10 @@
 
     <div id="tab-vegas" class="tab-panel" style="display:none;">
       <div class="loading-banner">Loading Entire Team Vegas Projections & League Comparison...</div>
+    </div>
+
+    <div id="tab-idp" class="tab-panel" style="display:none;">
+      <div class="loading-banner">Scanning Waiver Wire IDP Players (DL, LB, DB) & Underdog Defensive Props...</div>
     </div>
 
     <div id="tab-backtest" class="tab-panel" style="display:none;">
@@ -732,9 +743,11 @@
       let selectedObjective = 'total_wins';
       let selectedMarketWeight = 0.75;
       let selectedMarketSource = 'consensus';
+      let idpPosFilter = 'ALL'; // 'ALL' | 'DL' | 'LB' | 'DB' | 'UPGRADES'
 
       let liveState = null;
       let optimizerResult = null;
+      let idpWaiverAnalysis = null;
       let backtestResult = null;
       let backtestCacheKey = '';
 
@@ -803,6 +816,27 @@
         if (currentTab === 'backtest') ensureBacktestLoaded(true);
       });
 
+      document.getElementById('syncSleeperBtn').addEventListener('click', async () => {
+        const btn = document.getElementById('syncSleeperBtn');
+        const origHtml = btn.innerHTML;
+        btn.innerHTML = '⏳ Syncing Sleeper...';
+        btn.disabled = true;
+        try {
+          if (SleeperEngine.clearCache) SleeperEngine.clearCache();
+          await loadWeekAndOptimize(true);
+          const nowStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+          document.getElementById('statusText').textContent += ` • Synced Live from Sleeper (${nowStr})`;
+          btn.innerHTML = '✓ Sleeper Synced!';
+          setTimeout(() => {
+            btn.innerHTML = origHtml;
+            btn.disabled = false;
+          }, 1600);
+        } catch (err) {
+          btn.innerHTML = origHtml;
+          btn.disabled = false;
+        }
+      });
+
       document.getElementById('runSimBtn').addEventListener('click', () => {
         recomputeOptimizer(true);
       });
@@ -811,7 +845,8 @@
         const statusEl = document.getElementById('statusText');
         statusEl.textContent = `Fetching Week ${selectedWeek} Sleeper, Underdog Fantasy (${selectedMarketSource}) & Vegas lines...`;
         try {
-          const nflState = await fetch('https://api.sleeper.app/v1/state/nfl').then((r) => r.json()).catch(() => ({ display_week: 8 }));
+          const tsParam = forceRefresh ? `?_t=${Date.now()}` : '';
+          const nflState = await fetch(`https://api.sleeper.app/v1/state/nfl${tsParam}`).then((r) => r.json()).catch(() => ({ display_week: 8 }));
           const currentNflWeek = Number(nflState.display_week || 8);
 
           // If viewing a completed past week (< currentNflWeek), load its exact pregame state so we optimize pregame decisions
@@ -871,6 +906,10 @@
           });
         }
 
+        idpWaiverAnalysis = SleeperEngine.analyzeWaiverIdpUpgrades
+          ? SleeperEngine.analyzeWaiverIdpUpgrades(liveState, selectedRosterId, optimizerResult)
+          : null;
+
         const pill = document.getElementById('swapCountPill');
         const trueSwaps = (optimizerResult.recommendedSwaps || []).filter((s) => s.isTrueAddition || s.isTrueRemoval);
         pill.textContent = trueSwaps.length > 0 ? `${trueSwaps.length} Move${trueSwaps.length > 1 ? 's' : ''}` : 'Optimal';
@@ -884,9 +923,16 @@
           vegasPill.textContent = `${fmtNum(optPureVegas, 1)} Pts`;
         }
 
+        const idpPill = document.getElementById('idpUpgradePill');
+        if (idpPill && idpWaiverAnalysis) {
+          const b1 = idpWaiverAnalysis.bestSinglePickup;
+          idpPill.textContent = b1 ? `+${fmtNum(b1.dVegas, 1)} Pts` : 'Optimal';
+        }
+
         renderOptimizerTab();
         renderConflictsTab();
         renderVegasTeamTab();
+        renderIdpWaiverTab();
         renderPropsTab();
       }
 
@@ -2320,6 +2366,308 @@
             recomputeOptimizer();
           });
         });
+      }
+
+      // =========================================================================
+      // TAB 4: WAIVER WIRE IDP & DEFENSE UPGRADE FINDER (DL, LB, DB, IDP_FLEX)
+      // =========================================================================
+      function renderIdpWaiverTab() {
+        const container = document.getElementById('tab-idp');
+        if (!liveState || !idpWaiverAnalysis) return;
+
+        const a = idpWaiverAnalysis;
+        const base = a.baselineUnit;
+        const b1 = a.bestSinglePickup;
+        const b2 = a.bestTwoPickup;
+        const slotComps = a.slotComparisons || [];
+        const allWaivers = a.annotatedWaiverPool || [];
+
+        const filteredWaivers = allWaivers.filter((wp) => {
+          if (idpPosFilter === 'DL') return SleeperEngine.isEligibleForSlot(wp, 'DL');
+          if (idpPosFilter === 'LB') return SleeperEngine.isEligibleForSlot(wp, 'LB');
+          if (idpPosFilter === 'DB') return SleeperEngine.isEligibleForSlot(wp, 'DB');
+          if (idpPosFilter === 'UPGRADES') return wp.beatsPosStarter || wp.beatsAnyActiveStarter;
+          return true;
+        });
+
+        const hasEmptySlot = (base.unit || []).some((u) => u.isEmpty || u.playerId === '0');
+
+        container.innerHTML = `
+          <!-- 4 Executive KPI Cards: IDP Unit & Waiver Upgrade Summary -->
+          <div class="grid-4">
+            <!-- Card 1: Current 4-Slot IDP Unit -->
+            <div class="card ${hasEmptySlot ? 'card-highlight' : ''}">
+              <div class="card-title">
+                <span>1. Current 4-Slot IDP Unit</span>
+                <span class="badge ${hasEmptySlot ? 'badge-amber' : 'badge-cyan'}">${hasEmptySlot ? '⚠️ 1 Empty IDP Slot!' : '4/4 Filled'}</span>
+              </div>
+              <div class="metric-big mono">
+                ${fmtNum(base.pureVegasTotal, 2)} <span style="font-size:13px; color:var(--text-secondary);">Pure Market Pts</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                Blended Total: <b>${fmtNum(base.blendedTotal, 2)} pts</b> • Sleeper: <b>${fmtNum(base.sleeperTotal, 2)} pts</b>
+              </div>
+              ${(base.unit || [])
+                .map(
+                  (u) => `
+                  <div class="metric-row">
+                    <span><span class="pos-pill pos-${u.assignedSlot}" style="min-width:44px; font-size:9.5px; padding:1px 5px;">${u.assignedSlot}</span> ${u.isEmpty ? '<b style="color:#fda4af;">Empty Slot</b>' : `<b>${u.shortName}</b> (${u.team})`}</span>
+                    <span class="mono" style="font-weight:700; color:${u.isEmpty ? '#fda4af' : 'var(--accent-cyan)'};">${fmtNum(u.sportsbookProj ?? u.improvedProj)} Mkt / ${fmtNum(u.improvedProj)} Blnd</span>
+                  </div>
+                `
+                )
+                .join('')}
+            </div>
+
+            <!-- Card 2: Best 1-Player Waiver Addition -->
+            <div class="card card-highlight">
+              <div class="card-title">
+                <span>2. Best 1-Player Waiver Pickup</span>
+                <span class="badge badge-green">${b1 ? fmtDelta(b1.dVegas, 2, ' Vegas Pts') : 'Optimal'}</span>
+              </div>
+              ${
+                b1
+                  ? `
+                  <div class="metric-big mono" style="color:#4ade80;">
+                    +${fmtNum(b1.dBlend, 2)} <span style="font-size:13px; color:var(--text-secondary);">Blended Pts (${fmtDelta(b1.dVegas, 2, ' Mkt')})</span>
+                  </div>
+                  <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                    Add <b style="color:#4ade80;">${b1.waiverPlayer.fullName} (${b1.waiverPlayer.team} ${b1.waiverPlayer.position})</b> into <span class="badge badge-cyan">${b1.assignedSlot}</span>
+                  </div>
+                  <div class="metric-row">
+                    <span>New 4-IDP Unit Market Total</span>
+                    <span class="mono" style="color:#4ade80; font-weight:700;">${fmtNum(base.pureVegasTotal, 2)} → ${fmtNum(b1.solvedUnit.pureVegasTotal, 2)} pts</span>
+                  </div>
+                  <div class="metric-row">
+                    <span>New 4-IDP Unit Blended Total</span>
+                    <span class="mono" style="color:var(--accent-cyan); font-weight:700;">${fmtNum(base.blendedTotal, 2)} → ${fmtNum(b1.solvedUnit.blendedTotal, 2)} pts</span>
+                  </div>
+                  <div class="metric-row">
+                    <span>Underdog IDP Props</span>
+                    <span class="mono" style="font-size:11px;">${b1.waiverPlayer.sportsbookProps?.tackles || 0} Tkl+Ast • ${b1.waiverPlayer.sportsbookProps?.sacks || 0} Sack • ${b1.waiverPlayer.sportsbookProps?.defInts || 0} INT</span>
+                  </div>
+                `
+                  : `<div style="font-size:13px; color:var(--text-secondary);">Your current 4-slot IDP unit already beats all available single waiver pickups.</div>`
+              }
+            </div>
+
+            <!-- Card 3: Best 2-Player Waiver Combo -->
+            <div class="card">
+              <div class="card-title">
+                <span>3. Best 2-Player Waiver Upgrade</span>
+                <span class="badge badge-cyan">${b2 ? fmtDelta(b2.dVegas, 2, ' Vegas Pts') : '—'}</span>
+              </div>
+              ${
+                b2
+                  ? `
+                  <div class="metric-big mono" style="color:var(--accent-cyan);">
+                    +${fmtNum(b2.dBlend, 2)} <span style="font-size:13px; color:var(--text-secondary);">Blended Pts (${fmtDelta(b2.dVegas, 2, ' Mkt')})</span>
+                  </div>
+                  <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                    Add <b>${b2.players[0].shortName} (${b2.players[0].team} ${b2.players[0].position})</b> + <b>${b2.players[1].shortName} (${b2.players[1].team} ${b2.players[1].position})</b>
+                  </div>
+                  ${(b2.solvedUnit.unit || [])
+                    .map(
+                      (u) => `
+                      <div class="metric-row">
+                        <span><span class="pos-pill pos-${u.assignedSlot}" style="min-width:44px; font-size:9.5px; padding:1px 5px;">${u.assignedSlot}</span> <b>${u.shortName}</b> (${u.team} ${u.position})</span>
+                        <span class="mono" style="font-weight:700;">${fmtNum(u.sportsbookProj ?? u.improvedProj)} Mkt / ${fmtNum(u.improvedProj)} Blnd</span>
+                      </div>
+                    `
+                    )
+                    .join('')}
+                `
+                  : ''
+              }
+            </div>
+
+            <!-- Card 4: Direct Starter Upgrades Count & Live Sync -->
+            <div class="card">
+              <div class="card-title">
+                <span>4. Waiver Upgrades vs. Your Starters</span>
+                <span class="badge badge-purple">Live Underdog IDP Feed</span>
+              </div>
+              <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">
+                Unrostered Waiver IDPs with higher Implied Points than your current starter:
+              </div>
+              ${slotComps
+                .map(
+                  (sc) => `
+                  <div class="metric-row">
+                    <span>vs. <b>${sc.slot}</b> (${sc.currentStarter.shortName || 'Empty'} • ${fmtNum(sc.currMkt, 2)} Mkt)</span>
+                    <span class="badge ${sc.upgradeCount > 0 ? 'badge-green' : ''} mono">${sc.upgradeCount} Waiver Upgrade${sc.upgradeCount === 1 ? '' : 's'}</span>
+                  </div>
+                `
+                )
+                .join('')}
+              <div style="margin-top:10px;">
+                <button class="btn btn-primary" id="syncIdpTabBtn" style="width:100%; justify-content:center;">
+                  🔄 Sync Sleeper Lineup After Pickup
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 1: 4-Column Slot-by-Slot Comparison (DL, LB, DB, IDP_FLEX) -->
+          <div class="grid-4" style="margin-bottom:18px;">
+            ${slotComps
+              .map((sc) => {
+                const st = sc.currentStarter;
+                const isEmpty = st.playerId === '0';
+                return `
+                  <div class="card">
+                    <div class="card-title">
+                      <span><span class="pos-pill pos-${sc.slot}">${sc.slot}</span> Slot Comparison</span>
+                      <span class="badge ${sc.upgradeCount > 0 ? 'badge-green' : 'badge-cyan'}">${sc.upgradeCount} Better on Waivers</span>
+                    </div>
+                    <div style="background:rgba(15, 23, 42, 0.65); border:1px solid var(--border-subtle); border-radius:10px; padding:10px; margin-bottom:10px;">
+                      <div style="font-size:10.5px; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Your Current ${sc.slot} Starter</div>
+                      <div style="font-weight:800; font-size:14px; color:${isEmpty ? '#fda4af' : 'var(--text-primary)'}; margin-top:2px;">
+                        ${st.fullName} ${!isEmpty ? `<span style="font-size:11.5px; color:var(--text-muted); font-weight:500;">(${st.team} ${st.position})</span>` : ''}
+                      </div>
+                      <div class="mono" style="font-size:11.5px; color:var(--text-secondary); margin-top:4px;">
+                        Mkt: <b style="color:#4ade80;">${fmtNum(sc.currMkt)}</b> • Blnd: <b style="color:var(--accent-cyan);">${fmtNum(sc.currBlend)}</b> • Slp: ${fmtNum(sc.currSlp)}
+                      </div>
+                    </div>
+                    <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:6px;">
+                      Top Waiver Wire ${sc.slot} Upgrades:
+                    </div>
+                    ${
+                      sc.topUpgrades.length > 0
+                        ? sc.topUpgrades
+                            .slice(0, 5)
+                            .map(
+                              (u) => `
+                              <div style="padding:6px 0; border-bottom:1px solid rgba(148,163,184,0.08); display:flex; justify-content:space-between; align-items:center; gap:6px;">
+                                <div>
+                                  <div style="font-weight:700; font-size:12.5px;">
+                                    ${u.fullName} <span style="color:var(--text-muted); font-size:11px;">(${u.team} ${u.position})</span>
+                                  </div>
+                                  <div class="mono" style="font-size:10.5px; color:var(--text-secondary);">
+                                    Mkt: <b>${fmtNum(u.sportsbookProj)}</b> • Blnd: <b>${fmtNum(u.improvedProj)}</b> • ${u.sportsbookProps?.tackles || 0} Tkl / ${u.sportsbookProps?.sacks || 0} Sck
+                                  </div>
+                                </div>
+                                <span class="badge badge-green mono">${fmtDelta(Math.max(u.edgeMkt, u.edgeBlend), 2)}</span>
+                              </div>
+                            `
+                            )
+                            .join('')
+                        : `<div style="font-size:12px; color:var(--text-secondary); padding:8px 0;">✓ <b>${st.fullName}</b> already has higher implied points than every unrostered ${sc.slot} on the waiver wire!</div>`
+                    }
+                  </div>
+                `;
+              })
+              .join('')}
+          </div>
+
+          <!-- Section 2: Full Filterable Waiver Wire IDP Leaderboard -->
+          <div class="card">
+            <div class="card-title" style="flex-wrap:wrap; gap:10px;">
+              <div>
+                <span>🛡️ Available Waiver Wire IDP Players — Underdog Defensive Props, Vegas Script & Implied Points vs. ${a.teamName}</span>
+              </div>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                ${[
+                  { id: 'ALL', label: `All Waiver IDPs (${allWaivers.length})` },
+                  { id: 'UPGRADES', label: `🔥 Beats Active Starter (${allWaivers.filter((w) => w.beatsPosStarter || w.beatsAnyActiveStarter).length})` },
+                  { id: 'DL', label: 'DL Eligible' },
+                  { id: 'LB', label: 'LB Eligible' },
+                  { id: 'DB', label: 'DB Eligible' }
+                ]
+                  .map(
+                    (f) => `
+                    <button class="btn ${idpPosFilter === f.id ? 'btn-primary' : ''}" data-idp-filter="${f.id}" style="padding:5px 10px; font-size:11.5px;">
+                      ${f.label}
+                    </button>
+                  `
+                  )
+                  .join('')}
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Pos Eligibility</th>
+                    <th>Waiver IDP Player</th>
+                    <th>NFL Matchup & Vegas O/U</th>
+                    <th>Market Source</th>
+                    <th>Underdog Tackles+Ast</th>
+                    <th>Underdog Sacks</th>
+                    <th>Underdog INTs</th>
+                    <th>Sleeper Proj</th>
+                    <th>Pure Market / Vegas Proj</th>
+                    <th>Blended Implied Proj</th>
+                    <th>80% Sim CI (Floor–Ceil)</th>
+                    <th>vs. Your Pos Starter</th>
+                    <th>vs. Weakest Starter (${a.annotatedWaiverPool[0]?.weakestStarterName || 'Starter'})</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${filteredWaivers
+                    .slice(0, 45)
+                    .map((wp, idx) => {
+                      const sb = wp.sportsbookProps || {};
+                      const eligPills = (wp.fantasyPositions || [wp.canonicalPos])
+                        .map((fp) => `<span class="pos-pill pos-${fp}" style="min-width:30px; margin-right:3px;">${fp}</span>`)
+                        .join('');
+                      const bestPosEdge = Math.max(wp.edgeVsPosStarterMkt, wp.edgeVsPosStarterBlend);
+                      const bestWeakEdge = Math.max(wp.edgeVsWeakestStarterMkt, wp.edgeVsWeakestStarterBlend);
+                      return `
+                        <tr class="${wp.beatsPosStarter ? 'row-swap' : ''}">
+                          <td class="mono" style="font-weight:800;">#${idx + 1}</td>
+                          <td>${eligPills}</td>
+                          <td>
+                            <div style="font-weight:700;">${wp.fullName} <span class="badge badge-green" style="font-size:9.5px; margin-left:4px;">FA / WAIVER</span></div>
+                            <div style="font-size:11px; color:var(--text-muted);">${wp.team} • ${wp.position}</div>
+                          </td>
+                          <td class="mono" style="font-size:11.5px;">
+                            ${wp.opponent ? `<b>${wp.team}</b> ${wp.isHome ? 'vs' : '@'} ${wp.opponent} <span style="color:var(--text-muted);">(O/U ${fmtNum(wp.vegasTotal, 1)})</span>` : 'BYE'}
+                          </td>
+                          <td><span class="badge ${(wp.marketSourceLabel || '').includes('Underdog') ? 'badge-green' : 'badge-purple'}">${wp.marketSourceLabel || 'Market'}</span></td>
+                          <td class="mono" style="font-weight:700;">${sb.tackles > 0 ? `${fmtNum(sb.tackles, 2)} Tkl` : '—'}</td>
+                          <td class="mono">${sb.sacks > 0 ? `${fmtNum(sb.sacks, 2)} Sck` : '—'}</td>
+                          <td class="mono">${sb.defInts > 0 ? `${fmtNum(sb.defInts, 2)} INT` : '—'}</td>
+                          <td class="mono">${fmtNum(wp.sleeperProj)}</td>
+                          <td class="mono" style="font-weight:800; color:#4ade80; font-size:13.5px;">${fmtNum(wp.sportsbookProj)}</td>
+                          <td class="mono" style="font-weight:800; color:var(--accent-cyan); font-size:13.5px;">${fmtNum(wp.improvedProj)}</td>
+                          <td class="mono" style="font-size:11.5px; color:var(--text-secondary);">${fmtNum(wp.floor, 1)} – ${fmtNum(wp.ceiling, 1)}</td>
+                          <td class="mono">
+                            <span class="badge ${bestPosEdge > 0 ? 'badge-green' : 'badge-amber'}">
+                              ${fmtDelta(wp.edgeVsPosStarterMkt, 2)} Mkt / ${fmtDelta(wp.edgeVsPosStarterBlend, 2)} Blnd
+                            </span>
+                            <div style="font-size:10px; color:var(--text-muted); margin-top:2px;">vs ${wp.posStarterName} (${fmtNum(wp.posStarterMkt, 2)})</div>
+                          </td>
+                          <td class="mono">
+                            <span class="badge ${bestWeakEdge > 0 ? 'badge-cyan' : ''}">
+                              ${fmtDelta(wp.edgeVsWeakestStarterMkt, 2)} Mkt / ${fmtDelta(wp.edgeVsWeakestStarterBlend, 2)} Blnd
+                            </span>
+                            ${wp.fillsEmptyFlex ? `<div style="font-size:10px; color:#4ade80; margin-top:2px;">+${fmtNum(wp.sportsbookProj, 2)} into Empty IDP_FLEX</div>` : ''}
+                          </td>
+                        </tr>
+                      `;
+                    })
+                    .join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `;
+
+        container.querySelectorAll('[data-idp-filter]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            idpPosFilter = btn.getAttribute('data-idp-filter');
+            renderIdpWaiverTab();
+          });
+        });
+
+        const syncBtn = container.querySelector('#syncIdpTabBtn');
+        if (syncBtn) {
+          syncBtn.addEventListener('click', () => {
+            document.getElementById('syncSleeperBtn').click();
+          });
+        }
       }
 
       // =========================================================================
