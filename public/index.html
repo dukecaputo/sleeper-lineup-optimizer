@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0f19" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Fortèball Optimizer" />
   <title>Fantasy Fortèball — Sportsbook & Simulation Lineup Optimizer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -583,6 +587,279 @@
       color: var(--text-secondary);
       font-size: 14px;
     }
+
+    /* Distribution Percentile & Volatility Grid */
+    .dist-stats-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    /* Mobile Filter Drawer Toggle & Bottom App Bar (Hidden on Desktop) */
+    .mobile-filter-toggle {
+      display: none;
+    }
+
+    .mobile-bottom-nav {
+      display: none;
+    }
+
+    .mobile-lineup-cards {
+      display: none;
+    }
+
+    .mobile-slot-card {
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .mobile-slot-card.card-swap {
+      border-color: rgba(56, 189, 248, 0.45);
+      background: linear-gradient(145deg, rgba(14, 165, 233, 0.12) 0%, rgba(15, 23, 42, 0.92) 100%);
+    }
+
+    /* =========================================================================
+       MOBILE & TABLET RESPONSIVE OPTIMIZATIONS
+       ========================================================================= */
+    @media (max-width: 1024px) {
+      .dist-stats-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 900px) {
+      body {
+        padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+      }
+
+      .top-header {
+        padding: 10px 14px;
+      }
+
+      .header-top-row {
+        flex-wrap: wrap;
+        gap: 10px;
+        white-space: normal;
+      }
+
+      .brand-icon {
+        width: 32px;
+        height: 32px;
+        font-size: 15px;
+      }
+
+      .brand-title {
+        font-size: 14.5px;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .brand-badge {
+        display: none;
+      }
+
+      .brand-subtitle {
+        font-size: 10.5px;
+        white-space: normal;
+        display: -webkit-box;
+        -webkit-line-clamp: 1;
+        -webkit-box-orient: vertical;
+      }
+
+      .header-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 6px;
+      }
+
+      .header-actions button.btn,
+      .header-actions .tracker-link {
+        width: 100%;
+        padding: 7px 6px;
+        font-size: 11px;
+        justify-content: center;
+        text-align: center;
+      }
+
+      .mobile-filter-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(56, 189, 248, 0.14);
+        border-color: rgba(56, 189, 248, 0.45);
+        color: var(--accent-cyan);
+      }
+
+      /* Collapsible Controls Drawer on Mobile so Sticky Header Stays Compact */
+      .controls-bar {
+        display: none;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(148, 163, 184, 0.15);
+      }
+
+      .controls-bar.mobile-open {
+        display: grid;
+      }
+
+      .controls-bar .ctrl-group:first-child {
+        grid-column: 1 / -1;
+      }
+
+      select {
+        font-size: 16px !important; /* Prevents iOS Safari auto-zoom on tap */
+        padding: 8px 10px;
+        min-height: 40px;
+      }
+
+      .main-container {
+        padding: 0 12px;
+        margin-top: 10px;
+      }
+
+      /* Horizontal Touch-Scrollable Top Tabs on Mobile */
+      .nav-tabs {
+        display: flex;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        gap: 6px;
+        padding-bottom: 8px;
+        margin-bottom: 12px;
+      }
+
+      .nav-tabs::-webkit-scrollbar {
+        display: none;
+      }
+
+      .tab-btn {
+        flex: 0 0 auto;
+        padding: 8px 12px;
+        font-size: 11.5px;
+      }
+
+      /* Fixed Native-Style Bottom Navigation Bar for 1-Thumb Switching */
+      .mobile-bottom-nav {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 200;
+        background: rgba(11, 15, 25, 0.96);
+        backdrop-filter: blur(18px);
+        border-top: 1px solid rgba(148, 163, 184, 0.2);
+        padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+        box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.45);
+      }
+
+      .mobile-nav-item {
+        background: transparent;
+        border: none;
+        color: var(--text-muted);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 2px;
+        padding: 4px 2px;
+        border-radius: 8px;
+        font-family: inherit;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .mobile-nav-item .m-icon {
+        font-size: 16px;
+        line-height: 1.1;
+      }
+
+      .mobile-nav-item .m-label {
+        font-size: 10px;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .mobile-nav-item.active {
+        color: var(--accent-cyan);
+        background: rgba(56, 189, 248, 0.12);
+      }
+    }
+
+    @media (max-width: 768px) {
+      .card {
+        padding: 12px 13px;
+        border-radius: 12px;
+      }
+
+      .card-title {
+        flex-wrap: wrap;
+        gap: 6px;
+        font-size: 11.5px;
+      }
+
+      .metric-big {
+        font-size: 22px;
+      }
+
+      .dist-stats-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .preset-bar {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        scrollbar-width: none;
+        padding-bottom: 4px;
+      }
+
+      .preset-bar::-webkit-scrollbar {
+        display: none;
+      }
+
+      .preset-btn {
+        flex: 0 0 auto;
+        max-width: 260px;
+      }
+
+      .swap-card {
+        flex-direction: column;
+        align-items: flex-start;
+        padding: 10px 12px;
+      }
+
+      .bt-chart-row {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      /* Show Touch-Optimized Mobile Slot Cards & Hide Wide 9-Col Desktop Lineup Table */
+      .desktop-lineup-table {
+        display: none;
+      }
+
+      .mobile-lineup-cards {
+        display: block;
+      }
+
+      th, td {
+        padding: 7px 8px;
+        font-size: 11.5px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -608,18 +885,21 @@
         </div>
 
         <div class="header-actions">
-          <button class="btn" id="syncSleeperBtn" style="border-color:rgba(34, 197, 94, 0.55); background:rgba(34, 197, 94, 0.14); color:#4ade80;">
-            🔄 Sync Sleeper Lineup
+          <button class="btn mobile-filter-toggle" id="mobileFilterToggleBtn" type="button">
+            ⚙️ Filters
           </button>
-          <button class="btn btn-primary" id="runSimBtn">🎲 Re-Run 10,000 Sims</button>
+          <button class="btn" id="syncSleeperBtn" style="border-color:rgba(34, 197, 94, 0.55); background:rgba(34, 197, 94, 0.14); color:#4ade80;">
+            🔄 Sync Sleeper
+          </button>
+          <button class="btn btn-primary" id="runSimBtn">🎲 10K Sims</button>
           <a class="tracker-link" id="liveTrackerLink" href="http://localhost:3456" target="_blank" rel="noopener">
-            📡 Live Matchup Tracker ↗
+            📡 Tracker ↗
           </a>
         </div>
       </div>
 
-      <!-- Line 2: All 5 Dropdown Controls on One Single Line -->
-      <div class="controls-bar">
+      <!-- Line 2: All 5 Dropdown Controls (Single Line on Desktop, Collapsible Drawer on Mobile) -->
+      <div class="controls-bar" id="controlsDrawer">
         <div class="ctrl-group">
           <label class="ctrl-label" for="teamSelect">Target Team</label>
           <select id="teamSelect"></select>
@@ -725,6 +1005,30 @@
       <div class="loading-banner">Loading Underdog Fantasy & Sportsbook Player Props...</div>
     </div>
   </main>
+
+  <!-- Fixed Bottom App Tab Bar for Mobile Phones -->
+  <nav class="mobile-bottom-nav" aria-label="Mobile Navigation">
+    <button class="mobile-nav-item active" data-tab="optimizer" type="button">
+      <span class="m-icon">🎯</span>
+      <span class="m-label">Optimizer</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="vegas" type="button">
+      <span class="m-icon">🏟️</span>
+      <span class="m-label">Vegas View</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="idp" type="button">
+      <span class="m-icon">🛡️</span>
+      <span class="m-label">IDP Wire</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="backtest" type="button">
+      <span class="m-icon">📈</span>
+      <span class="m-label">Backtest</span>
+    </button>
+    <button class="mobile-nav-item" data-tab="props" type="button">
+      <span class="m-icon">📊</span>
+      <span class="m-label">Props</span>
+    </button>
+  </nav>
 
   <script>
 /**
@@ -4643,6 +4947,16 @@
         liveLink.href = 'https://dukecaputo.github.io/sleeper-live-tracker/';
       }
 
+      // Mobile Filter Drawer Toggle
+      const filterToggleBtn = document.getElementById('mobileFilterToggleBtn');
+      const controlsDrawer = document.getElementById('controlsDrawer');
+      if (filterToggleBtn && controlsDrawer) {
+        filterToggleBtn.addEventListener('click', () => {
+          const isOpen = controlsDrawer.classList.toggle('mobile-open');
+          filterToggleBtn.innerHTML = isOpen ? '✕ Close' : '⚙️ Filters';
+        });
+      }
+
       const fmtPct = (v) => `${(Number(v || 0) * 100).toFixed(1)}%`;
       const fmtNum = (v, d = 2) => Number(v || 0).toFixed(d);
       const fmtDelta = (v, d = 2, suffix = '') => {
@@ -4651,18 +4965,27 @@
         return `${sign}${num.toFixed(d)}${suffix}`;
       };
 
-      // Switch Tabs
-      document.querySelectorAll('.tab-btn').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-          btn.classList.add('active');
-          currentTab = btn.getAttribute('data-tab');
-          document.querySelectorAll('.tab-panel').forEach((p) => {
-            p.style.display = p.id === `tab-${currentTab}` ? 'block' : 'none';
-          });
-          if (currentTab === 'backtest') {
-            ensureBacktestLoaded();
+      // Switch Tabs (Synchronized across Top Nav Tabs & Mobile Bottom Nav Bar)
+      function switchActiveTab(targetTab) {
+        currentTab = targetTab;
+        document.querySelectorAll('.tab-btn, .mobile-nav-item').forEach((b) => {
+          if (b.getAttribute('data-tab') === currentTab) {
+            b.classList.add('active');
+          } else {
+            b.classList.remove('active');
           }
+        });
+        document.querySelectorAll('.tab-panel').forEach((p) => {
+          p.style.display = p.id === `tab-${currentTab}` ? 'block' : 'none';
+        });
+        if (currentTab === 'backtest') {
+          ensureBacktestLoaded();
+        }
+      }
+
+      document.querySelectorAll('.tab-btn, .mobile-nav-item').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          switchActiveTab(btn.getAttribute('data-tab'));
         });
       });
 
@@ -5207,7 +5530,7 @@
             ${distSvg}
 
             <!-- Percentile & Volatility Decomposition Strip -->
-            <div style="display:grid; grid-template-columns:repeat(6, minmax(0, 1fr)); gap:10px; margin-top:12px;">
+            <div class="dist-stats-grid">
               <div style="background:rgba(15,23,42,0.75); border:1px solid var(--border-subtle); border-radius:8px; padding:8px 10px;">
                 <div style="font-size:10px; color:var(--text-muted); font-weight:700; text-transform:uppercase;">Downside Floor (p05 / p10)</div>
                 <div class="mono" style="font-size:14px; font-weight:800; color:#5eead4; margin-top:2px;">${fmtNum(act.p05, 1)} / ${fmtNum(act.p10, 1)}</div>
@@ -5260,8 +5583,8 @@
                       .map(
                         (g) => `
                         <div style="background:rgba(15,23,42,0.78); border:1px solid ${g.count >= 3 ? 'rgba(245,158,11,0.55)' : 'rgba(56,189,248,0.28)'}; border-radius:10px; padding:12px 14px;">
-                          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
-                            <div style="font-weight:800; font-size:13.5px; color:var(--text-primary);">
+                          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:6px;">
+                            <div style="font-weight:800; font-size:13px; color:var(--text-primary);">
                               <span class="badge ${g.count >= 3 ? 'badge-amber' : 'badge-cyan'}" style="margin-right:6px;">${g.team} × ${g.count} Starters</span>
                               ${g.archetype}
                             </div>
@@ -5363,19 +5686,18 @@
             <div class="card-title" style="flex-wrap:wrap; gap:8px;">
               <span>📋 Interactive 14-Slot Lineup Builder — Swap Any Slot to Test Distribution & Volatility</span>
               <span style="font-size:11.5px; color:var(--text-muted); text-transform:none;">
-                Use any dropdown in the <b>Interactive Player / Swap</b> column or click a <b>Quick Bench Swap</b> pill below to test lineup changes
+                Tap any slot dropdown or click a <b>Quick Bench Swap</b> pill below to test lineup changes in real time
               </span>
             </div>
 
             <!-- Quick Bench Contenders Bar -->
             <div style="background:rgba(15,23,42,0.75); border:1px solid var(--border-subtle); border-radius:10px; padding:10px 12px; margin-bottom:14px;">
               <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">
-                ⚡ Quick Bench Swap — Click to Sub Top Bench Contender into Lowest-Projected Eligible Slot:
+                ⚡ Quick Bench Swap — Tap to Sub Top Bench Contender into Lowest-Projected Eligible Slot:
               </div>
               <div style="display:flex; flex-wrap:wrap; gap:8px;">
                 ${benchContenders
                   .map((bp) => {
-                    // Find lowest-projected eligible slot in activeEval.lineup
                     let targetSlotIdx = -1;
                     let lowestPts = Infinity;
                     optimizerResult.slots.forEach((slotName, sIdx) => {
@@ -5405,113 +5727,128 @@
               </div>
             </div>
 
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Slot</th>
-                    <th>Status</th>
-                    <th style="min-width:270px;">Interactive Player / Swap Slot</th>
-                    <th>Same-Team Exposure</th>
-                    <th>Vegas Game Environment</th>
-                    <th>Underdog / Sportsbook Prop Lines</th>
-                    <th>Sleeper</th>
-                    <th>Pure Vegas</th>
-                    <th>80% Player CI</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${activeEval.lineup
-                    .map((p, slotIdx) => {
-                      const slotName = optimizerResult.slots[slotIdx];
-                      const isNewVsCurrent = !currentStarterSet.has(p.playerId);
-                      const isInOptimal = optimalStarterSet.has(p.playerId);
-                      const sb = p.sportsbookProps;
-                      const propSummary = sb
-                        ? [
-                            sb.passYds > 0 ? `${sb.passYds} PaYd (${sb.passTd} TD)` : null,
-                            sb.rushYds > 0 ? `${sb.rushYds} RuYd` : null,
-                            sb.rec > 0 ? `${sb.rec} Rec / ${sb.recYds} RecYd` : null,
-                            sb.anytimeTdProb > 0 ? `${Math.round(sb.anytimeTdProb * 100)}% TD` : null,
-                            sb.tackles > 0 ? `${sb.tackles} Tkl+Ast` : null,
-                            sb.sacks > 0 ? `${sb.sacks} Sack` : null,
-                            sb.defInts > 0 ? `${sb.defInts} INT` : null
-                          ]
-                            .filter(Boolean)
-                            .join(' • ')
-                        : '<span style="color:var(--text-muted);">—</span>';
+            ${(() => {
+              const slotItems = activeEval.lineup.map((p, slotIdx) => {
+                const slotName = optimizerResult.slots[slotIdx];
+                const isNewVsCurrent = !currentStarterSet.has(p.playerId);
+                const isInOptimal = optimalStarterSet.has(p.playerId);
+                const sb = p.sportsbookProps;
+                const propSummary = sb
+                  ? [
+                      sb.passYds > 0 ? `${sb.passYds} PaYd (${sb.passTd} TD)` : null,
+                      sb.rushYds > 0 ? `${sb.rushYds} RuYd` : null,
+                      sb.rec > 0 ? `${sb.rec} Rec / ${sb.recYds} RecYd` : null,
+                      sb.anytimeTdProb > 0 ? `${Math.round(sb.anytimeTdProb * 100)}% TD` : null,
+                      sb.tackles > 0 ? `${sb.tackles} Tkl+Ast` : null,
+                      sb.sacks > 0 ? `${sb.sacks} Sack` : null,
+                      sb.defInts > 0 ? `${sb.defInts} INT` : null
+                    ]
+                      .filter(Boolean)
+                      .join(' • ')
+                  : '<span style="color:var(--text-muted);">—</span>';
 
-                      const teamCount = !['DL', 'LB', 'DB'].includes(p.canonicalPos) ? (activeTeamCounts.get(p.team) || 0) : 1;
-                      const sameTeamBadge =
-                        teamCount >= 3
-                          ? `<span class="badge badge-amber mono">${p.team} ×${teamCount} (Heavy Stack)</span>`
-                          : teamCount === 2
-                          ? `<span class="badge badge-cyan mono">${p.team} ×2 (Shared Offense)</span>`
-                          : `<span style="color:var(--text-muted); font-size:11px;">Unique Offense</span>`;
+                const teamCount = !['DL', 'LB', 'DB'].includes(p.canonicalPos) ? (activeTeamCounts.get(p.team) || 0) : 1;
+                const sameTeamBadge =
+                  teamCount >= 3
+                    ? `<span class="badge badge-amber mono">${p.team} ×${teamCount} (Heavy Stack)</span>`
+                    : teamCount === 2
+                    ? `<span class="badge badge-cyan mono">${p.team} ×2 (Shared Offense)</span>`
+                    : `<span style="color:var(--text-muted); font-size:11px;">Unique Offense</span>`;
 
-                      const gameEnv = p.opponent
-                        ? `<b>${p.team}</b> ${p.isHome ? 'vs' : '@'} ${p.opponent} <span class="mono" style="color:var(--accent-cyan);">(${fmtNum(p.teamImpliedPts, 1)} imp | O/U ${fmtNum(p.vegasTotal, 1)})</span>`
-                        : `${p.team} (Bye / No Line)`;
+                const gameEnv = p.opponent
+                  ? `<b>${p.team}</b> ${p.isHome ? 'vs' : '@'} ${p.opponent} <span class="mono" style="color:var(--accent-cyan);">(${fmtNum(p.teamImpliedPts, 1)} imp | O/U ${fmtNum(p.vegasTotal, 1)})</span>`
+                  : `${p.team} (Bye / No Line)`;
 
-                      // Build eligible options for this slot
-                      const eligiblePlayers = (optimizerResult.allRosterPlayers || []).filter((cand) =>
-                        optimizerResult.isEligibleForSlot(cand, slotName)
-                      );
+                const eligiblePlayers = (optimizerResult.allRosterPlayers || []).filter((cand) =>
+                  optimizerResult.isEligibleForSlot(cand, slotName)
+                );
 
-                      const optionsHtml = eligiblePlayers
-                        .map((cand) => {
-                          const isCurrentSlotPlayer = cand.playerId === p.playerId;
-                          const otherSlotIdx = activeEval.lineup.findIndex(
-                            (st, i) => i !== slotIdx && st && st.playerId === cand.playerId
-                          );
-                          const statusPrefix = isCurrentSlotPlayer
-                            ? '✓ '
-                            : otherSlotIdx >= 0
-                            ? `[In ${optimizerResult.slots[otherSlotIdx]}] `
-                            : '[BENCH] ';
-                          const candTeamCnt =
-                            !['DL', 'LB', 'DB'].includes(cand.canonicalPos)
-                              ? (activeTeamCounts.get(cand.team) || 0) - (cand.team === p.team ? 1 : 0)
-                              : 0;
-                          const stackSuffix = candTeamCnt > 0 ? ` • ⚡ ${cand.team} ×${candTeamCnt + 1}` : '';
-                          return `<option value="${cand.playerId}" ${isCurrentSlotPlayer ? 'selected' : ''}>${statusPrefix}${cand.fullName} (${cand.team} ${cand.position}) — ${fmtNum(cand.improvedProj, 2)} pts${stackSuffix}</option>`;
-                        })
-                        .join('');
+                const optionsHtml = eligiblePlayers
+                  .map((cand) => {
+                    const isCurrentSlotPlayer = cand.playerId === p.playerId;
+                    const otherSlotIdx = activeEval.lineup.findIndex(
+                      (st, i) => i !== slotIdx && st && st.playerId === cand.playerId
+                    );
+                    const statusPrefix = isCurrentSlotPlayer
+                      ? '✓ '
+                      : otherSlotIdx >= 0
+                      ? `[In ${optimizerResult.slots[otherSlotIdx]}] `
+                      : '[BENCH] ';
+                    const candTeamCnt =
+                      !['DL', 'LB', 'DB'].includes(cand.canonicalPos)
+                        ? (activeTeamCounts.get(cand.team) || 0) - (cand.team === p.team ? 1 : 0)
+                        : 0;
+                    const stackSuffix = candTeamCnt > 0 ? ` • ⚡ ${cand.team} ×${candTeamCnt + 1}` : '';
+                    return `<option value="${cand.playerId}" ${isCurrentSlotPlayer ? 'selected' : ''}>${statusPrefix}${cand.fullName} (${cand.team} ${cand.position}) — ${fmtNum(cand.improvedProj, 2)} pts${stackSuffix}</option>`;
+                  })
+                  .join('');
 
-                      return `
-                        <tr class="${isNewVsCurrent ? 'row-swap' : ''}">
-                          <td><span class="pos-pill pos-${slotName}">${slotName}</span></td>
-                          <td>
-                            ${
-                              isNewVsCurrent
-                                ? '<span class="badge badge-green">SWAP IN</span>'
-                                : '<span class="badge" style="background:rgba(148,163,184,0.12); color:var(--text-secondary);">STARTER</span>'
-                            }
-                            ${!isInOptimal ? '<div style="margin-top:3px;"><span class="badge badge-amber" style="font-size:9.5px;">Custom</span></div>' : ''}
-                          </td>
-                          <td>
-                            <select class="slot-player-select" data-slot-index="${slotIdx}" style="width:100%; font-weight:700; background:rgba(15,23,42,0.9); border-color:rgba(56,189,248,0.3);">
-                              ${optionsHtml}
-                            </select>
-                          </td>
-                          <td>${sameTeamBadge}</td>
-                          <td style="font-size:12px;">${gameEnv}</td>
-                          <td class="mono" style="font-size:11.5px;">${propSummary || '—'}</td>
-                          <td class="mono">${fmtNum(p.sleeperProj)}</td>
-                          <td class="mono" style="font-weight:800; color:var(--accent-cyan); font-size:13.5px;">${fmtNum(p.sportsbookProj ?? p.vegasMarketProj ?? p.improvedProj)}</td>
-                          <td class="mono" style="font-size:11.5px; color:var(--text-secondary);">${fmtNum(p.floor, 1)} – ${fmtNum(p.ceiling, 1)}</td>
-                        </tr>
-                      `;
-                    })
-                    .join('')}
-                </tbody>
-                <tfoot>
-                  ${(() => {
-                    const lu = activeEval.lineup || [];
-                    const totSlp = lu.reduce((s, p) => s + Number(p.sleeperProj || 0), 0);
-                    const totMkt = lu.reduce((s, p) => s + Number(p.sportsbookProj ?? p.vegasMarketProj ?? p.improvedProj ?? 0), 0);
-                    const avgImp = lu.filter((p) => p.teamImpliedPts > 0).reduce((s, p, _, a) => s + Number(p.teamImpliedPts) / a.length, 0);
-                    return `
+                return {
+                  p,
+                  slotIdx,
+                  slotName,
+                  isNewVsCurrent,
+                  isInOptimal,
+                  propSummary,
+                  sameTeamBadge,
+                  gameEnv,
+                  optionsHtml
+                };
+              });
+
+              const lu = activeEval.lineup || [];
+              const totSlp = lu.reduce((s, p) => s + Number(p.sleeperProj || 0), 0);
+              const totMkt = lu.reduce((s, p) => s + Number(p.sportsbookProj ?? p.vegasMarketProj ?? p.improvedProj ?? 0), 0);
+              const avgImp = lu.filter((p) => p.teamImpliedPts > 0).reduce((s, p, _, a) => s + Number(p.teamImpliedPts) / a.length, 0);
+
+              return `
+                <!-- Desktop 9-Column Interactive Table -->
+                <div class="table-wrap desktop-lineup-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Slot</th>
+                        <th>Status</th>
+                        <th style="min-width:270px;">Interactive Player / Swap Slot</th>
+                        <th>Same-Team Exposure</th>
+                        <th>Vegas Game Environment</th>
+                        <th>Underdog / Sportsbook Prop Lines</th>
+                        <th>Sleeper</th>
+                        <th>Pure Vegas</th>
+                        <th>80% Player CI</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${slotItems
+                        .map(
+                          (it) => `
+                          <tr class="${it.isNewVsCurrent ? 'row-swap' : ''}">
+                            <td><span class="pos-pill pos-${it.slotName}">${it.slotName}</span></td>
+                            <td>
+                              ${
+                                it.isNewVsCurrent
+                                  ? '<span class="badge badge-green">SWAP IN</span>'
+                                  : '<span class="badge" style="background:rgba(148,163,184,0.12); color:var(--text-secondary);">STARTER</span>'
+                              }
+                              ${!it.isInOptimal ? '<div style="margin-top:3px;"><span class="badge badge-amber" style="font-size:9.5px;">Custom</span></div>' : ''}
+                            </td>
+                            <td>
+                              <select class="slot-player-select" data-slot-index="${it.slotIdx}" style="width:100%; font-weight:700; background:rgba(15,23,42,0.9); border-color:rgba(56,189,248,0.3);">
+                                ${it.optionsHtml}
+                              </select>
+                            </td>
+                            <td>${it.sameTeamBadge}</td>
+                            <td style="font-size:12px;">${it.gameEnv}</td>
+                            <td class="mono" style="font-size:11.5px;">${it.propSummary || '—'}</td>
+                            <td class="mono">${fmtNum(it.p.sleeperProj)}</td>
+                            <td class="mono" style="font-weight:800; color:var(--accent-cyan); font-size:13.5px;">${fmtNum(it.p.sportsbookProj ?? it.p.vegasMarketProj ?? it.p.improvedProj)}</td>
+                            <td class="mono" style="font-size:11.5px; color:var(--text-secondary);">${fmtNum(it.p.floor, 1)} – ${fmtNum(it.p.ceiling, 1)}</td>
+                          </tr>
+                        `
+                        )
+                        .join('')}
+                    </tbody>
+                    <tfoot>
                       <tr style="background:rgba(56, 189, 248, 0.10); border-top:2px solid var(--border-accent); font-weight:800;">
                         <td colspan="4" class="mono" style="color:var(--accent-cyan);">ACTIVE 14-STARTER LINEUP TOTAL</td>
                         <td class="mono" style="font-size:11.5px; color:var(--accent-cyan);">Avg NFL Team Implied: ${fmtNum(avgImp, 1)} pts</td>
@@ -5520,11 +5857,60 @@
                         <td class="mono" style="color:var(--accent-cyan); font-size:14px;">${fmtNum(totMkt)}</td>
                         <td class="mono" style="font-size:11.5px; color:var(--text-secondary);">${fmtNum(act.p10, 1)} – ${fmtNum(act.p90, 1)} (σ=${fmtNum(act.stdDev, 1)})</td>
                       </tr>
-                    `;
-                  })()}
-                </tfoot>
-              </table>
-            </div>
+                    </tfoot>
+                  </table>
+                </div>
+
+                <!-- Mobile Touch-Optimized Interactive Slot Cards (<= 768px) -->
+                <div class="mobile-lineup-cards">
+                  ${slotItems
+                    .map(
+                      (it) => `
+                      <div class="mobile-slot-card ${it.isNewVsCurrent ? 'card-swap' : ''}">
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <span class="pos-pill pos-${it.slotName}">${it.slotName}</span>
+                            ${
+                              it.isNewVsCurrent
+                                ? '<span class="badge badge-green">SWAP IN</span>'
+                                : '<span class="badge" style="background:rgba(148,163,184,0.12); color:var(--text-secondary);">STARTER</span>'
+                            }
+                            ${it.sameTeamBadge}
+                          </div>
+                          <div style="text-align:right;">
+                            <div class="mono" style="font-weight:800; color:var(--accent-cyan); font-size:14px;">
+                              ${fmtNum(it.p.sportsbookProj ?? it.p.vegasMarketProj ?? it.p.improvedProj)} <span style="font-size:10px; font-weight:600; color:var(--text-muted);">Vegas</span>
+                            </div>
+                            <div class="mono" style="font-size:10px; color:var(--text-muted);">
+                              Slp: ${fmtNum(it.p.sleeperProj, 1)} • CI: ${fmtNum(it.p.floor, 1)}–${fmtNum(it.p.ceiling, 1)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <select class="slot-player-select" data-slot-index="${it.slotIdx}" style="width:100%; font-weight:700; background:rgba(11,15,25,0.95); border-color:rgba(56,189,248,0.4);">
+                          ${it.optionsHtml}
+                        </select>
+
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; font-size:11px; color:var(--text-secondary);">
+                          <span>${it.gameEnv}</span>
+                          <span class="mono" style="color:var(--text-muted);">${it.propSummary}</span>
+                        </div>
+                      </div>
+                    `
+                    )
+                    .join('')}
+
+                  <div style="background:rgba(56, 189, 248, 0.12); border:1px solid var(--border-highlight); border-radius:10px; padding:12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-weight:800;">
+                    <div class="mono" style="color:var(--accent-cyan); font-size:12.5px;">ACTIVE 14-STARTER TOTAL</div>
+                    <div class="mono" style="font-size:13px;">
+                      Vegas: <span style="color:var(--accent-cyan); font-size:15px;">${fmtNum(totMkt)}</span>
+                      &nbsp;•&nbsp; Slp: ${fmtNum(totSlp)}
+                      &nbsp;•&nbsp; <span style="color:#4ade80;">${fmtDelta(totMkt - totSlp, 1, ' pts')}</span>
+                    </div>
+                  </div>
+                </div>
+              `;
+            })()}
           </div>
 
           <!-- Pairwise Correlation Details for Active Lineup -->
