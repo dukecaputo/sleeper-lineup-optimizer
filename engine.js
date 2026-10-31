@@ -41,15 +41,12 @@
       requestUrl = `${url}${sep}_t=${now}`;
     }
 
-    const fetchOpts = {
-      method,
-      headers: {
-        Accept: 'application/json',
-        ...(options.headers || {})
-      }
-    };
+    const fetchOpts = { method };
+    if (options.headers) {
+      fetchOpts.headers = { ...options.headers };
+    }
     if (body) fetchOpts.body = body;
-    if (ttlMs <= 10000 && typeof window !== 'undefined') {
+    if (ttlMs === 0 && typeof window !== 'undefined' && (url.includes('api.sleeper.app') || url.includes('api.sleeper.com'))) {
       fetchOpts.cache = 'no-store';
     }
 
