@@ -3870,12 +3870,704 @@
     };
   }
 
+  /**
+   * Solve the globally optimal 14-slot starting lineup for a team in a future week `w`,
+   * automatically replacing players on NFL Bye weeks with the highest-projected eligible bench players.
+   * Uses the exact matroid slot ordering:
+   *   1) Mandatory single-position slots: QB, RB, RB, WR, WR, WR, TE, DL, LB, DB
+   *   2) Restrictive flex slots: FLEX, FLEX, IDP_FLEX
+   *   3) Broadest flex slot: SUPER_FLEX
+   */
+  function solveOptimalFutureWeekLineup(rosterCandidates, starterSlots) {
+    const usedIds = new Set();
+    const assignedBySlotIdx = new Array(starterSlots.length).fill(null);
+
+    const slotPriority = (slot) => {
+      if (['QB', 'RB', 'WR', 'TE', 'DL', 'LB', 'DB'].includes(slot)) return 1;
+      if (slot === 'FLEX' || slot === 'IDP_FLEX') return 2;
+      if (slot === 'SUPER_FLEX') return 3;
+      return 4;
+    };
+
+    const orderedSlotIndices = starterSlots
+      .map((slot, idx) => ({ slot, idx, prio: slotPriority(slot) }))
+      .sort((a, b) => a.prio - b.prio || a.idx - b.idx);
+
+    const activePool = rosterCandidates
+      .filter((p) => p && !p.isOnBye && p.projPts > 0.1)
+      .sort((a, b) => b.projPts - a.projPts);
+
+    for (const { slot, idx } of orderedSlotIndices) {
+      let bestP = null;
+      for (const p of activePool) {
+        if (usedIds.has(p.playerId)) continue;
+        if (isEligibleForSlot(p, slot)) {
+          bestP = p;
+          break;
+        }
+      }
+      if (bestP) {
+        usedIds.add(bestP.playerId);
+        assignedBySlotIdx[idx] = { ...bestP, assignedSlot: slot };
+      } else {
+        assignedBySlotIdx[idx] = {
+          playerId: '0',
+          fullName: 'Empty / Bye Gap',
+          shortName: 'Empty',
+          position: slot,
+          canonicalPos: slot === 'SUPER_FLEX' ? 'QB' : (slot === 'FLEX' ? 'WR' : (slot === 'IDP_FLEX' ? 'LB' : slot)),
+          team: 'FA',
+          opponent: '',
+          projPts: 0,
+          sleeperPts: 0,
+          sdPts: 2.0,
+          assignedSlot: slot,
+          isEmpty: true
+        };
+      }
+    }
+
+    let totalProj = 0;
+    let totalSleeperProj = 0;
+    let totalVar = 0;
+    const byTeamOffense = new Map();
+
+    for (const st of assignedBySlotIdx) {
+      if (!st || st.isEmpty) continue;
+      totalProj += st.projPts;
+      totalSleeperProj += st.sleeperPts;
+      totalVar += st.sdPts * st.sdPts;
+      if (st.team && st.team !== 'FA' && !['DL', 'LB', 'DB'].includes(st.canonicalPos)) {
+        if (!byTeamOffense.has(st.team)) byTeamOffense.set(st.team, []);
+        byTeamOffense.get(st.team).push(st);
+      }
+    }
+
+    // Account for same-team offensive stack covariance in future weeks
+    for (const [, tPlayers] of byTeamOffense.entries()) {
+      if (tPlayers.length < 2) continue;
+      const hasQb = tPlayers.some((p) => p.canonicalPos === 'QB');
+      const sumSd = tPlayers.reduce((s, p) => s + p.sdPts, 0);
+      const scale = hasQb ? 0.18 * (tPlayers.length - 1) : 0.11 * (tPlayers.length - 1);
+      totalVar += Math.pow(sumSd * scale, 2);
+    }
+
+    const totalSd = Math.sqrt(Math.max(100.0, totalVar));
+    const onByePlayers = rosterCandidates
+      .filter((p) => p && p.isOnBye && p.baselineValue >= 5.5)
+      .sort((a, b) => b.baselineValue - a.baselineValue);
+
+    const topStarters = [...assignedBySlotIdx]
+      .filter((p) => p && !p.isEmpty)
+      .sort((a, b) => b.projPts - a.projPts)
+      .slice(0, 4);
+
+    return {
+      starters: assignedBySlotIdx,
+      totalProj: Number(totalProj.toFixed(2)),
+      totalSleeperProj: Number(totalSleeperProj.toFixed(2)),
+      totalSd: Number(totalSd.toFixed(2)),
+      onByePlayers,
+      topStarters
+    };
+  }
+
+  /**
+   * REST OF SEASON (ROS) STANDINGS, SCHEDULE & PLAYOFF MONTE CARLO SIMULATOR
+   *
+   * Combines:
+   *  1) Official Completed Standings & Points For (Weeks 1..last_scored_leg, e.g. Weeks 1-7)
+   *  2) Current In-Progress / Live Week 8 State & Remaining Player Distributions
+   *  3) Remaining Regular Season Schedule & Weekly Player Projections (Weeks 9..13)
+   *     with Optimal 14-Starter Bye-Week Lineup Assignment & Vegas Market Talent Adjustments
+   *  4) 4-Team Playoff Bracket Simulation across Weeks 14-17 (2-week Semifinals W14-15 + 2-week Finals W16-17)
+   */
+  async function runRestOfSeasonSimulation(leagueId = DEFAULT_LEAGUE_ID, currentState = null, options = {}) {
+    const startMs = Date.now();
+    const numSims = options.numSims || 6000;
+    const marketWeight = options.marketWeight !== undefined
+      ? Number(options.marketWeight)
+      : (currentState?.marketWeight !== undefined ? Number(currentState.marketWeight) : 1.0);
+    const useOptimalCurrentWeek = options.useOptimalCurrentWeek !== undefined ? Boolean(options.useOptimalCurrentWeek) : false;
+
+    const longTtl = 1800000; // 30 min cache for future weekly projections & schedules
+    const nflState = await fetchJson('https://api.sleeper.app/v1/state/nfl', {}, 60000);
+    const currentNflWeek = Number(nflState.display_week || nflState.week || 8);
+
+    // Ensure we have the live currentNflWeek state (even if user is inspecting an earlier week in the UI)
+    let liveState = currentState;
+    if (!liveState || Number(liveState.league?.week) !== currentNflWeek) {
+      liveState = await getLeagueLiveState(leagueId, currentNflWeek, false, true, marketWeight, currentState?.marketSource || 'consensus');
+    }
+
+    const leagueInfo = await fetchJson(`https://api.sleeper.app/v1/league/${leagueId}`, {}, longTtl);
+    const season = leagueInfo.season || liveState.league?.season || '2026';
+    const scoringSettings = leagueInfo.scoring_settings || {};
+    const starterSlots = (leagueInfo.roster_positions || []).filter((p) => p !== 'BN');
+    const playoffWeekStart = Number(leagueInfo.settings?.playoff_week_start || 14);
+    const regularSeasonEndWeek = playoffWeekStart - 1; // Week 13
+    const playoffTeamsCount = Number(leagueInfo.settings?.playoff_teams || 4);
+    const lastScoredWeek = Number(leagueInfo.settings?.last_scored_leg || (currentNflWeek - 1));
+
+    // Future regular season weeks (e.g. 9..13) and playoff weeks (14..17)
+    const futureRegWeeks = [];
+    for (let w = currentNflWeek + 1; w <= regularSeasonEndWeek; w++) futureRegWeeks.push(w);
+    const playoffWeeks = [14, 15, 16, 17].filter((w) => w >= playoffWeekStart);
+    const allFutureWeeks = [...futureRegWeeks, ...playoffWeeks];
+
+    const canonicalPosQuery = 'position[]=DB&position[]=DL&position[]=LB&position[]=QB&position[]=RB&position[]=TE&position[]=WR&season_type=regular';
+
+    const [futureMatchupsArr, futureProjsArr] = await Promise.all([
+      Promise.all(
+        futureRegWeeks.map((w) =>
+          fetchJson(`https://api.sleeper.app/v1/league/${leagueId}/matchups/${w}`, {}, longTtl).catch(() => [])
+        )
+      ),
+      Promise.all(
+        allFutureWeeks.map((w) =>
+          fetchJson(`https://api.sleeper.com/projections/nfl/${season}/${w}?${canonicalPosQuery}`, {}, longTtl).catch(() => [])
+        )
+      )
+    ]);
+
+    const matchupsByWeek = new Map();
+    futureRegWeeks.forEach((w, idx) => {
+      matchupsByWeek.set(w, futureMatchupsArr[idx] || []);
+    });
+
+    const projsByWeek = new Map();
+    allFutureWeeks.forEach((w, idx) => {
+      const map = new Map();
+      for (const entry of (futureProjsArr[idx] || [])) {
+        if (entry && entry.player_id) {
+          map.set(String(entry.player_id), entry);
+        }
+      }
+      projsByWeek.set(w, map);
+    });
+
+    // Extract player metadata and Vegas/Underdog market talent multiplier from liveState
+    const playerMetaById = new Map();
+    const rostersData = liveState.rostersData || [];
+    const numTeams = rostersData.length;
+
+    for (const r of rostersData) {
+      const allPlayers = [...(r.rawStarters || r.starters || []), ...(r.rawBench || r.bench || [])];
+      for (const p of allPlayers) {
+        if (!p || !p.playerId || p.playerId === '0') continue;
+        const slpPre = Number(p.sleeperPregameProj || 0);
+        const mktPre = Number(p.sportsbookProj ?? p.pregameProj ?? slpPre);
+        let talentMult = 1.0;
+        if (slpPre >= 3.5 && mktPre > 0) {
+          const rawRatio = mktPre / slpPre;
+          // Persist 45% of the current Vegas/Underdog prop over/under-valuation into ROS weekly projections
+          talentMult = Math.max(0.84, Math.min(1.20, 1.0 + 0.45 * (rawRatio - 1.0)));
+        }
+        playerMetaById.set(String(p.playerId), {
+          playerId: String(p.playerId),
+          fullName: p.fullName,
+          shortName: p.shortName,
+          position: p.position,
+          canonicalPos: p.canonicalPos,
+          fantasyPositions: p.fantasyPositions,
+          team: p.team,
+          talentMult,
+          baselineValue: Math.max(mktPre, slpPre, Number(p.improvedProj || 0))
+        });
+      }
+    }
+
+    const posCvMap = {
+      QB: { cv: 0.38, baseSd: 2.2 },
+      RB: { cv: 0.50, baseSd: 2.0 },
+      WR: { cv: 0.58, baseSd: 2.1 },
+      TE: { cv: 0.62, baseSd: 1.8 },
+      DL: { cv: 0.70, baseSd: 1.5 },
+      LB: { cv: 0.50, baseSd: 1.4 },
+      DB: { cv: 0.62, baseSd: 1.4 }
+    };
+
+    // Build optimal weekly projections for every team across all future weeks (Weeks 9..17)
+    // teamWeeklyModels.get(w) -> Map<rosterId, { totalProj, totalSleeperProj, totalSd, starters, onByePlayers, topStarters }>
+    const teamWeeklyModels = new Map();
+
+    for (const w of allFutureWeeks) {
+      const wProjMap = projsByWeek.get(w) || new Map();
+      const weekTeamMap = new Map();
+
+      for (const r of rostersData) {
+        const rosterPlayerIds = Array.from(
+          new Set(
+            [...(r.rawStarters || r.starters || []), ...(r.rawBench || r.bench || [])]
+              .map((p) => String(p?.playerId || '0'))
+              .filter((id) => id !== '0')
+          )
+        );
+
+        const candidates = rosterPlayerIds.map((pid) => {
+          const meta = playerMetaById.get(pid) || {};
+          const pEntry = wProjMap.get(pid);
+          const pInfo = pEntry?.player || {};
+          const cPos = meta.canonicalPos || canonicalPos(pInfo.position || 'WR');
+          const fPos = meta.fantasyPositions || (pInfo.fantasy_positions || [cPos]);
+          const team = normalizeTeamCode(pEntry?.team || meta.team || pInfo.team || 'FA');
+          const opponent = normalizeTeamCode(pEntry?.opponent || '');
+          const isOnBye = !pEntry || !opponent || opponent === 'FA';
+
+          const rawSlpPts = isOnBye ? 0 : computeCustomPoints(pEntry.stats || {}, scoringSettings);
+          const tMult = meta.talentMult || 1.0;
+          const blendedMult = 1.0 + marketWeight * (tMult - 1.0);
+          const projPts = isOnBye ? 0 : Number((rawSlpPts * blendedMult).toFixed(2));
+          const vol = posCvMap[cPos] || { cv: 0.55, baseSd: 1.8 };
+          const sdPts = projPts > 0.2 ? Math.sqrt(Math.pow(vol.cv * projPts, 2) + Math.pow(vol.baseSd, 2)) : 0;
+
+          return {
+            playerId: pid,
+            fullName: meta.fullName || `${pInfo.first_name || ''} ${pInfo.last_name || ''}`.trim() || `#${pid}`,
+            shortName: meta.shortName || `${(pInfo.first_name || 'P').charAt(0)}. ${pInfo.last_name || pid}`,
+            position: meta.position || pInfo.position || cPos,
+            canonicalPos: cPos,
+            fantasyPositions: fPos,
+            team,
+            opponent,
+            isOnBye,
+            projPts,
+            sleeperPts: Number(rawSlpPts.toFixed(2)),
+            sdPts,
+            baselineValue: meta.baselineValue || rawSlpPts
+          };
+        });
+
+        const solved = solveOptimalFutureWeekLineup(candidates, starterSlots);
+        weekTeamMap.set(r.rosterId, solved);
+      }
+
+      teamWeeklyModels.set(w, weekTeamMap);
+    }
+
+    // Build opponent lookup per week (Week 8 live + Weeks 9..13 future)
+    const rosterIdxById = new Map();
+    rostersData.forEach((r, idx) => rosterIdxById.set(r.rosterId, idx));
+
+    const buildWeekOppIndex = (matchupsList) => {
+      const oppIdx = new Int32Array(numTeams).fill(-1);
+      const byMid = new Map();
+      for (const m of matchupsList) {
+        const rIdx = rosterIdxById.get(m.roster_id ?? m.rosterId);
+        const mid = m.matchup_id ?? m.matchupId;
+        if (rIdx === undefined || !mid) continue;
+        if (!byMid.has(mid)) byMid.set(mid, []);
+        byMid.get(mid).push(rIdx);
+      }
+      for (const pair of byMid.values()) {
+        if (pair.length === 2) {
+          oppIdx[pair[0]] = pair[1];
+          oppIdx[pair[1]] = pair[0];
+        }
+      }
+      return oppIdx;
+    };
+
+    const weekOppIndices = new Map();
+    weekOppIndices.set(currentNflWeek, buildWeekOppIndex(rostersData));
+    for (const w of futureRegWeeks) {
+      weekOppIndices.set(w, buildWeekOppIndex(matchupsByWeek.get(w) || []));
+    }
+
+    // Prepare Week 8 (currentNflWeek) parameters per team
+    const w8Mean = new Float64Array(numTeams);
+    const w8Sd = new Float64Array(numTeams);
+    const w8CurrentPts = new Float64Array(numTeams);
+    const w8SleeperProj = new Float64Array(numTeams);
+
+    for (let i = 0; i < numTeams; i++) {
+      const r = rostersData[i];
+      w8CurrentPts[i] = Number(r.currentPts || 0);
+      w8Mean[i] = Number(r.simulation?.simMean ?? r.improvedTotalProj ?? r.currentPts ?? 140);
+      w8Sd[i] = Number(r.simulation?.simSd ?? 16.5);
+      w8SleeperProj[i] = Number(r.sleeperTotalProj ?? w8Mean[i]);
+    }
+
+    // Prepare Future Weeks (9..17) mean & SD arrays indexed by [week][teamIdx]
+    const futureMeanByWeek = new Map();
+    const futureSdByWeek = new Map();
+    for (const w of allFutureWeeks) {
+      const mArr = new Float64Array(numTeams);
+      const sArr = new Float64Array(numTeams);
+      const wMap = teamWeeklyModels.get(w);
+      for (let i = 0; i < numTeams; i++) {
+        const mod = wMap.get(rostersData[i].rosterId);
+        mArr[i] = mod ? mod.totalProj : 145.0;
+        sArr[i] = mod ? mod.totalSd : 22.0;
+      }
+      futureMeanByWeek.set(w, mArr);
+      futureSdByWeek.set(w, sArr);
+    }
+
+    // Track per-week matchup and median win counts across all simulations
+    const allRegSimWeeks = [currentNflWeek, ...futureRegWeeks];
+    const weeklyStatsAccum = new Map();
+    for (const w of allRegSimWeeks) {
+      weeklyStatsAccum.set(w, {
+        h2hWins: new Float64Array(numTeams),
+        medWins: new Float64Array(numTeams),
+        win2_0: new Float64Array(numTeams),
+        win1_1: new Float64Array(numTeams),
+        win0_2: new Float64Array(numTeams),
+        medianCutoffSum: 0
+      });
+    }
+
+    // Track season-level accumulators across numSims
+    const baseWins = rostersData.map((r) => Number(r.wins || 0));
+    const baseLosses = rostersData.map((r) => Number(r.losses || 0));
+    const baseFpts = rostersData.map((r) => Number(r.fptsSeason || 0));
+    const totalRegSeasonGames = regularSeasonEndWeek * 2; // 13 weeks * 2 = 26 games
+
+    const totalWinsSum = new Float64Array(numTeams);
+    const totalPtsSum = new Float64Array(numTeams);
+    const ros9to13WinsSum = new Float64Array(numTeams);
+    const winDistCounts = Array.from({ length: numTeams }, () => new Int32Array(totalRegSeasonGames + 1));
+    const teamWinSamples = Array.from({ length: numTeams }, () => new Float32Array(numSims));
+    const teamPtsSamples = Array.from({ length: numTeams }, () => new Float32Array(numSims));
+
+    const seedCounts = Array.from({ length: numTeams }, () => new Int32Array(numTeams));
+    const playoffCounts = new Int32Array(numTeams);
+    const top2SeedCounts = new Int32Array(numTeams);
+    const firstSeedCounts = new Int32Array(numTeams);
+    const finalsCounts = new Int32Array(numTeams);
+    const champCounts = new Int32Array(numTeams);
+
+    const rng = new FastRNG(20261102);
+    const simWins = new Float64Array(numTeams);
+    const simFpts = new Float64Array(numTeams);
+    const weekScores = new Float64Array(numTeams);
+    const sortedScores = new Float64Array(numTeams);
+    const rankIndices = Array.from({ length: numTeams }, (_, i) => i);
+
+    for (let s = 0; s < numSims; s++) {
+      for (let i = 0; i < numTeams; i++) {
+        simWins[i] = baseWins[i];
+        simFpts[i] = baseFpts[i];
+      }
+
+      // Simulate Week 8 (live) + Weeks 9..13 (future regular season)
+      for (let wIdx = 0; wIdx < allRegSimWeeks.length; wIdx++) {
+        const w = allRegSimWeeks[wIdx];
+        const isLive = w === currentNflWeek;
+        const mArr = isLive ? w8Mean : futureMeanByWeek.get(w);
+        const sArr = isLive ? w8Sd : futureSdByWeek.get(w);
+        const oppIdx = weekOppIndices.get(w);
+        const wAcc = weeklyStatsAccum.get(w);
+
+        // Shared weekly NFL scoring environment shock (subtle league-wide high/low scoring week correlation)
+        const leagueEnvZ = rng.nextGaussian() * 0.18;
+
+        for (let i = 0; i < numTeams; i++) {
+          const z = 0.983 * rng.nextGaussian() + leagueEnvZ;
+          let sc;
+          if (isLive) {
+            const remMean = Math.max(0, mArr[i] - w8CurrentPts[i]);
+            sc = w8CurrentPts[i] + sampleSkewedRemaining(z, remMean, sArr[i], 0.45);
+          } else {
+            sc = sampleSkewedRemaining(z, mArr[i], sArr[i], 0.35);
+          }
+          weekScores[i] = sc;
+          sortedScores[i] = sc;
+          simFpts[i] += sc;
+        }
+
+        sortedScores.sort();
+        const midR = Math.floor(numTeams / 2);
+        const midL = Math.max(0, midR - 1);
+        const medCutoff = 0.5 * (sortedScores[midL] + sortedScores[midR]);
+        wAcc.medianCutoffSum += medCutoff;
+
+        for (let i = 0; i < numTeams; i++) {
+          const opp = oppIdx[i];
+          let wonH2H = 0;
+          if (opp >= 0) {
+            if (weekScores[i] > weekScores[opp]) wonH2H = 1;
+            else if (weekScores[i] === weekScores[opp]) wonH2H = 0.5;
+          }
+          let wonMed = 0;
+          if (weekScores[i] > medCutoff) wonMed = 1;
+          else if (weekScores[i] === medCutoff) wonMed = 0.5;
+
+          const wWins = wonH2H + wonMed;
+          simWins[i] += wWins;
+          if (!isLive) {
+            ros9to13WinsSum[i] += wWins;
+          }
+
+          wAcc.h2hWins[i] += wonH2H;
+          wAcc.medWins[i] += wonMed;
+          if (wonH2H === 1 && wonMed === 1) wAcc.win2_0[i] += 1;
+          else if (wonH2H === 0 && wonMed === 0) wAcc.win0_2[i] += 1;
+          else wAcc.win1_1[i] += 1;
+        }
+      }
+
+      // Record regular-season totals & rank teams 1..10 (Tiebreaker: Total Season Fantasy Points)
+      for (let i = 0; i < numTeams; i++) {
+        totalWinsSum[i] += simWins[i];
+        totalPtsSum[i] += simFpts[i];
+        teamWinSamples[i][s] = simWins[i];
+        teamPtsSamples[i][s] = simFpts[i];
+        const wBucket = Math.max(0, Math.min(totalRegSeasonGames, Math.round(simWins[i])));
+        winDistCounts[i][wBucket]++;
+      }
+
+      rankIndices.sort((a, b) => (simWins[b] - simWins[a]) || (simFpts[b] - simFpts[a]));
+
+      for (let rank = 0; rank < numTeams; rank++) {
+        const tIdx = rankIndices[rank];
+        seedCounts[tIdx][rank]++;
+        if (rank < playoffTeamsCount) playoffCounts[tIdx]++;
+        if (rank < 2) top2SeedCounts[tIdx]++;
+        if (rank === 0) firstSeedCounts[tIdx]++;
+      }
+
+      // Simulate 4-Team Playoff Bracket (2-Week Semifinals in Weeks 14-15, 2-Week Championship in Weeks 16-17)
+      const seed1 = rankIndices[0];
+      const seed2 = rankIndices[1];
+      const seed3 = rankIndices[2];
+      const seed4 = rankIndices[3];
+
+      const samplePlayoff2WeekScore = (tIdx, wA, wB) => {
+        const mA = futureMeanByWeek.get(wA)?.[tIdx] || 148.0;
+        const sA = futureSdByWeek.get(wA)?.[tIdx] || 22.0;
+        const mB = futureMeanByWeek.get(wB)?.[tIdx] || 148.0;
+        const sB = futureSdByWeek.get(wB)?.[tIdx] || 22.0;
+        const scA = sampleSkewedRemaining(rng.nextGaussian(), mA, sA, 0.35);
+        const scB = sampleSkewedRemaining(rng.nextGaussian(), mB, sB, 0.35);
+        return scA + scB;
+      };
+
+      const sf1Score1 = samplePlayoff2WeekScore(seed1, 14, 15);
+      const sf1Score4 = samplePlayoff2WeekScore(seed4, 14, 15);
+      const finalist1 = sf1Score1 >= sf1Score4 ? seed1 : seed4;
+
+      const sf2Score2 = samplePlayoff2WeekScore(seed2, 14, 15);
+      const sf2Score3 = samplePlayoff2WeekScore(seed3, 14, 15);
+      const finalist2 = sf2Score2 >= sf2Score3 ? seed2 : seed3;
+
+      finalsCounts[finalist1]++;
+      finalsCounts[finalist2]++;
+
+      const finScore1 = samplePlayoff2WeekScore(finalist1, 16, 17);
+      const finScore2 = samplePlayoff2WeekScore(finalist2, 16, 17);
+      const champion = finScore1 >= finScore2 ? finalist1 : finalist2;
+      champCounts[champion]++;
+    }
+
+    // Build detailed week-by-week schedule & forecast for every team (Weeks 8..13)
+    const teamSchedules = {};
+    const teamSosRaw = new Float64Array(numTeams);
+
+    for (let i = 0; i < numTeams; i++) {
+      const r = rostersData[i];
+      const sched = [];
+      let oppFuturePtsSum = 0;
+
+      for (const w of allRegSimWeeks) {
+        const isLive = w === currentNflWeek;
+        const oppIdx = weekOppIndices.get(w)[i];
+        const oppR = oppIdx >= 0 ? rostersData[oppIdx] : null;
+        const wAcc = weeklyStatsAccum.get(w);
+
+        const teamMod = isLive ? null : teamWeeklyModels.get(w)?.get(r.rosterId);
+        const oppMod = (isLive || !oppR) ? null : teamWeeklyModels.get(w)?.get(oppR.rosterId);
+
+        const teamProj = isLive ? Number(w8Mean[i].toFixed(2)) : (teamMod ? teamMod.totalProj : 145.0);
+        const teamSleeperProj = isLive ? Number(w8SleeperProj[i].toFixed(2)) : (teamMod ? teamMod.totalSleeperProj : 142.0);
+        const teamSd = isLive ? Number(w8Sd[i].toFixed(2)) : (teamMod ? teamMod.totalSd : 22.0);
+        const oppProj = isLive
+          ? (oppIdx >= 0 ? Number(w8Mean[oppIdx].toFixed(2)) : 145.0)
+          : (oppMod ? oppMod.totalProj : 145.0);
+
+        if (!isLive) {
+          oppFuturePtsSum += oppProj;
+        }
+
+        // For live Week 8, use the exact joint simulation probabilities from liveState so they match 100%
+        const h2hWinProb = isLive
+          ? Number((r.simulation?.h2hWinProbImproved ?? (wAcc.h2hWins[i] / numSims)).toFixed(4))
+          : Number((wAcc.h2hWins[i] / numSims).toFixed(4));
+        const medianWinProb = isLive
+          ? Number((r.simulation?.medianWinProbImproved ?? (wAcc.medWins[i] / numSims)).toFixed(4))
+          : Number((wAcc.medWins[i] / numSims).toFixed(4));
+        const prob2_0 = isLive
+          ? Number((r.simulation?.prob2_0 ?? (wAcc.win2_0[i] / numSims)).toFixed(4))
+          : Number((wAcc.win2_0[i] / numSims).toFixed(4));
+        const prob1_1 = isLive
+          ? Number((r.simulation?.prob1_1 ?? (wAcc.win1_1[i] / numSims)).toFixed(4))
+          : Number((wAcc.win1_1[i] / numSims).toFixed(4));
+        const prob0_2 = isLive
+          ? Number((r.simulation?.prob0_2 ?? (wAcc.win0_2[i] / numSims)).toFixed(4))
+          : Number((wAcc.win0_2[i] / numSims).toFixed(4));
+
+        sched.push({
+          week: w,
+          isLiveWeek: isLive,
+          oppRosterId: oppR ? oppR.rosterId : null,
+          oppTeamName: oppR ? oppR.teamName : 'BYE',
+          oppOwnerName: oppR ? oppR.ownerName : '',
+          currentPts: isLive ? Number(w8CurrentPts[i].toFixed(2)) : null,
+          oppCurrentPts: (isLive && oppR) ? Number(oppR.currentPts.toFixed(2)) : null,
+          teamProj,
+          teamSleeperProj,
+          teamSd,
+          oppProj,
+          projDiff: Number((teamProj - oppProj).toFixed(2)),
+          leagueMedianProj: isLive
+            ? Number((liveState.leagueMedian?.expectedMedianImproved || (wAcc.medianCutoffSum / numSims)).toFixed(2))
+            : Number((wAcc.medianCutoffSum / numSims).toFixed(2)),
+          h2hWinProb,
+          medianWinProb,
+          prob2_0,
+          prob1_1,
+          prob0_2,
+          expectedWins: Number((h2hWinProb + medianWinProb).toFixed(3)),
+          onByePlayers: isLive ? [] : (teamMod?.onByePlayers || []).slice(0, 5),
+          topStarters: isLive
+            ? [...(r.starters || [])].sort((a, b) => b.improvedProj - a.improvedProj).slice(0, 4).map((p) => ({
+                shortName: p.shortName,
+                position: p.canonicalPos || p.position,
+                team: p.team,
+                projPts: p.improvedProj
+              }))
+            : (teamMod?.topStarters || []).map((p) => ({
+                shortName: p.shortName,
+                position: p.canonicalPos || p.position,
+                team: p.team,
+                projPts: p.projPts
+              }))
+        });
+      }
+
+      teamSchedules[r.rosterId] = sched;
+      teamSosRaw[i] = futureRegWeeks.length > 0 ? oppFuturePtsSum / futureRegWeeks.length : 145.0;
+    }
+
+    // Rank Strength of Schedule (SOS): #1 = Hardest remaining opponent PPG, #10 = Easiest
+    const sosOrder = Array.from({ length: numTeams }, (_, i) => i).sort((a, b) => teamSosRaw[b] - teamSosRaw[a]);
+    const sosRankByTeamIdx = new Int32Array(numTeams);
+    sosOrder.forEach((tIdx, rnk) => {
+      sosRankByTeamIdx[tIdx] = rnk + 1;
+    });
+
+    // Assemble final standingsProjections for all 10 teams
+    const standingsProjections = rostersData.map((r, i) => {
+      const winSamps = teamWinSamples[i];
+      const ptsSamps = teamPtsSamples[i];
+      winSamps.sort();
+      ptsSamps.sort();
+
+      const expWins = totalWinsSum[i] / numSims;
+      const expLosses = totalRegSeasonGames - expWins;
+      const expSeasonPts = totalPtsSum[i] / numSims;
+      const sched = teamSchedules[r.rosterId] || [];
+      const futureSched = sched.filter((x) => !x.isLiveWeek);
+      const liveWeekEntry = sched.find((x) => x.isLiveWeek) || null;
+
+      const rosFuturePts = futureSched.reduce((acc, x) => acc + x.teamProj, 0);
+      const rosFutureAvgPpg = futureSched.length > 0 ? rosFuturePts / futureSched.length : 0;
+      const rosFutureExpWins = futureSched.reduce((acc, x) => acc + x.expectedWins, 0);
+
+      // Playoff weeks (14-17) average projected PPG
+      const playoffPpg = playoffWeeks.length > 0
+        ? playoffWeeks.reduce((acc, w) => acc + (teamWeeklyModels.get(w)?.get(r.rosterId)?.totalProj || 0), 0) / playoffWeeks.length
+        : rosFutureAvgPpg;
+
+      const winHistogram = [];
+      for (let wCount = 0; wCount <= totalRegSeasonGames; wCount++) {
+        winHistogram.push({
+          wins: wCount,
+          losses: totalRegSeasonGames - wCount,
+          prob: Number((winDistCounts[i][wCount] / numSims).toFixed(4))
+        });
+      }
+
+      return {
+        rosterId: r.rosterId,
+        teamName: r.teamName,
+        ownerName: r.ownerName,
+        avatarUrl: r.avatarUrl,
+        division: r.division,
+        // Official Completed Record (Weeks 1..7)
+        currentWins: baseWins[i],
+        currentLosses: baseLosses[i],
+        currentFpts: baseFpts[i],
+        // Live Week 8 Forecast
+        liveWeek: liveWeekEntry,
+        // Remaining Regular Season (Weeks 9..13)
+        rosWeeksCount: futureSched.length,
+        rosDecisionsCount: futureSched.length * 2,
+        rosAvgPpg: Number(rosFutureAvgPpg.toFixed(2)),
+        rosTotalPts: Number(rosFuturePts.toFixed(2)),
+        rosExpectedWins: Number(rosFutureExpWins.toFixed(2)),
+        playoffAvgPpg: Number(playoffPpg.toFixed(2)),
+        sosAvgOppPpg: Number(teamSosRaw[i].toFixed(2)),
+        sosRank: sosRankByTeamIdx[i],
+        // Projected Final Regular Season Standing (After Week 13 — 26 Total Decisions)
+        expectedWins: Number(expWins.toFixed(2)),
+        expectedLosses: Number(expLosses.toFixed(2)),
+        medianWins: Number(winSamps[Math.floor(numSims * 0.50)].toFixed(1)),
+        p10Wins: Number(winSamps[Math.floor(numSims * 0.10)].toFixed(1)),
+        p90Wins: Number(winSamps[Math.floor(numSims * 0.90)].toFixed(1)),
+        expectedSeasonPts: Number(expSeasonPts.toFixed(2)),
+        p10SeasonPts: Number(ptsSamps[Math.floor(numSims * 0.10)].toFixed(1)),
+        p90SeasonPts: Number(ptsSamps[Math.floor(numSims * 0.90)].toFixed(1)),
+        // Seed & Playoff Probabilities
+        playoffProb: Number((playoffCounts[i] / numSims).toFixed(4)),
+        top2SeedProb: Number((top2SeedCounts[i] / numSims).toFixed(4)),
+        firstSeedProb: Number((firstSeedCounts[i] / numSims).toFixed(4)),
+        finalsProb: Number((finalsCounts[i] / numSims).toFixed(4)),
+        champProb: Number((champCounts[i] / numSims).toFixed(4)),
+        seedProbs: Array.from(seedCounts[i]).map((c) => Number((c / numSims).toFixed(4))),
+        winHistogram
+      };
+    });
+
+    standingsProjections.sort(
+      (a, b) => b.expectedWins - a.expectedWins || b.expectedSeasonPts - a.expectedSeasonPts
+    );
+
+    standingsProjections.forEach((t, idx) => {
+      t.projectedRank = idx + 1;
+    });
+
+    // Estimate the expected Playoff Cutoff Wins (4th seed win total distribution)
+    const fourthSeedTeam = standingsProjections[Math.min(playoffTeamsCount - 1, standingsProjections.length - 1)];
+    const fifthSeedTeam = standingsProjections[Math.min(playoffTeamsCount, standingsProjections.length - 1)];
+    const expectedPlayoffCutoffWins = Number(
+      (0.5 * ((fourthSeedTeam?.expectedWins || 15) + (fifthSeedTeam?.expectedWins || 14))).toFixed(1)
+    );
+
+    return {
+      computeTimeMs: Date.now() - startMs,
+      numSims,
+      season,
+      currentNflWeek,
+      lastScoredWeek,
+      regularSeasonEndWeek,
+      playoffWeekStart,
+      playoffTeamsCount,
+      totalRegSeasonGames,
+      expectedPlayoffCutoffWins,
+      standingsProjections,
+      teamSchedules
+    };
+  }
+
   return {
     DEFAULT_LEAGUE_ID,
     clearCache,
     getLeagueLiveState,
     getPregameHistoricalWeekState,
     runHistoricalBacktest,
+    runRestOfSeasonSimulation,
     recomputeLeagueFromRosters,
     applyAutoSubForByeOrOut,
     runJointLeagueSimulation,
