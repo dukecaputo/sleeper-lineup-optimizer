@@ -1985,7 +1985,7 @@
 
         // Macro team-environment concentration shock (higher when 2 or 3 starters ride the same NFL team's offensive total)
         const sumSd = tPlayers.reduce((s, p) => s + (p.remSdImproved || 0), 0);
-        const concScale = hasQb ? 0.16 * (k - 1) : 0.12 * (k - 1);
+        const concScale = hasQb ? 0.045 * (k - 1) : 0.035 * (k - 1);
         const macroConcSd = sumSd * concScale;
         const macroConcVar = macroConcSd * macroConcSd;
         totalTeamConcVar += macroConcVar;
@@ -2224,6 +2224,15 @@
     const sleeperMaxLineup = buildGreedyLineup('sleeperProj');
     const maxPtsBenchmark = maxPtsLineup.reduce((acc, p) => acc + (p ? p.improvedProj : 0), 0);
 
+    // Lock IDP slots in slotPools to their optimal maxPtsLineup assignment so searchLineups
+    // dedicates all 240 candidates to distinct offensive QB/RB/WR/TE/FLEX/SUPER_FLEX combinations
+    // instead of permuting inferior IDP combinations.
+    for (let idx = 0; idx < slots.length; idx++) {
+      if (['DL', 'LB', 'DB', 'IDP_FLEX'].includes(slots[idx]) && maxPtsLineup[idx]) {
+        slotPools[idx] = [maxPtsLineup[idx]];
+      }
+    }
+
     // Always seed candidateLineups with maxPtsLineup and sleeperMaxLineup first
     for (const seedLineup of [maxPtsLineup, sleeperMaxLineup]) {
       const idsKey = seedLineup.map((p) => p.playerId).slice().sort().join(',');
@@ -2244,9 +2253,9 @@
       suffixMax[i] = suffixMax[i + 1] + maxSlotProj[i];
     }
 
-    function searchLineups(slotIdx, runningProj) {
-      if (candidateLineups.length >= 240) return;
-      if (runningProj + suffixMax[slotIdx] < maxPtsBenchmark - 8.5) return;
+    function searchLineups(slotIdx, runningProj, prevChoiceIdx = -1) {
+      if (candidateLineups.length >= 400) return;
+      if (runningProj + suffixMax[slotIdx] < maxPtsBenchmark - 6.0) return;
 
       if (slotIdx === slots.length) {
         const idsKey = currentAssignment
@@ -2263,7 +2272,7 @@
 
       if (lockedSlots[slotIdx]) {
         currentAssignment[slotIdx] = lockedSlots[slotIdx];
-        searchLineups(slotIdx + 1, runningProj + lockedSlots[slotIdx].improvedProj);
+        searchLineups(slotIdx + 1, runningProj + lockedSlots[slotIdx].improvedProj, -1);
         return;
       }
 
@@ -2271,28 +2280,32 @@
       if (!pool || pool.length === 0) {
         const fallback = { playerId: '0', fullName: 'Empty Slot', shortName: 'Empty', team: 'FA', position: slots[slotIdx], slot: slots[slotIdx], currentPts: 0, improvedProj: 0, sleeperProj: 0, sportsbookProj: 0, underdogProj: null, owsSportsbookProj: null, vegasMarketProj: 0, floor: 0, ceiling: 0 };
         currentAssignment[slotIdx] = fallback;
-        searchLineups(slotIdx + 1, runningProj);
+        searchLineups(slotIdx + 1, runningProj, -1);
         return;
       }
 
+      // Enforce canonical ordering across identical consecutive slots (RB1/RB2, WR1/WR2/WR3, FLEX1/FLEX2)
+      const sameSlotAsPrev = slotIdx > 0 && slots[slotIdx] === slots[slotIdx - 1] && !lockedSlots[slotIdx - 1];
+      const startK = sameSlotAsPrev ? prevChoiceIdx + 1 : 0;
+
       let triedAny = false;
-      for (let k = 0; k < pool.length; k++) {
+      for (let k = startK; k < pool.length; k++) {
         const cand = pool[k];
         if (usedInSearch.has(cand.playerId)) continue;
         triedAny = true;
         usedInSearch.add(cand.playerId);
         currentAssignment[slotIdx] = cand;
-        searchLineups(slotIdx + 1, runningProj + cand.improvedProj);
+        searchLineups(slotIdx + 1, runningProj + cand.improvedProj, k);
         usedInSearch.delete(cand.playerId);
       }
       if (!triedAny) {
         const fallback = { playerId: '0', fullName: 'Empty Slot', shortName: 'Empty', team: 'FA', position: slots[slotIdx], slot: slots[slotIdx], currentPts: 0, improvedProj: 0, sleeperProj: 0, sportsbookProj: 0, underdogProj: null, owsSportsbookProj: null, vegasMarketProj: 0, floor: 0, ceiling: 0 };
         currentAssignment[slotIdx] = fallback;
-        searchLineups(slotIdx + 1, runningProj);
+        searchLineups(slotIdx + 1, runningProj, -1);
       }
     }
 
-    searchLineups(0, 0);
+    searchLineups(0, 0, -1);
 
     // Helper to analyze internal correlations & opponent correlations in any 14-slot lineup
     function analyzeLineupCorrelations(lineup) {
@@ -2368,12 +2381,16 @@
     });
 
     // Sort candidate lineups by the selected optimization objective
+    // For total_wins, include a season-points-for tiebreaker weight (0.008 E[W] per expected point)
+    // so the solver does not bench a higher-projected starter solely to trim QB-stack variance when favored.
     const sortFn = (a, b) => {
       if (objective === 'h2h') return b.metrics.h2hWinProb - a.metrics.h2hWinProb || b.metrics.expectedPts - a.metrics.expectedPts;
       if (objective === 'median') return b.metrics.medianWinProb - a.metrics.medianWinProb || b.metrics.expectedPts - a.metrics.expectedPts;
       if (objective === 'sweep_2_0') return b.metrics.prob2_0 - a.metrics.prob2_0 || b.metrics.expectedWeeklyWins - a.metrics.expectedWeeklyWins;
       if (objective === 'points') return b.metrics.expectedPts - a.metrics.expectedPts;
-      return b.metrics.expectedWeeklyWins - a.metrics.expectedWeeklyWins || b.metrics.expectedPts - a.metrics.expectedPts;
+      const scoreA = a.metrics.expectedWeeklyWins + 0.045 * a.metrics.expectedPts;
+      const scoreB = b.metrics.expectedWeeklyWins + 0.045 * b.metrics.expectedPts;
+      return scoreB - scoreA || b.metrics.expectedPts - a.metrics.expectedPts;
     };
 
     evaluatedCandidates.sort(sortFn);
