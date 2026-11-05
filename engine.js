@@ -2454,60 +2454,181 @@
     function computeSwapsAgainstBaseline(candidateLineup, baselineLineup) {
       const candIds = new Set(candidateLineup.map((p) => p?.playerId).filter((id) => id && id !== '0'));
       const baseIds = new Set(baselineLineup.map((p) => p?.playerId).filter((id) => id && id !== '0'));
-      const swaps = [];
+
+      // Map where each playerId sits in baselineLineup and candidateLineup
+      const baseSlotByPid = new Map();
+      const candSlotByPid = new Map();
       for (let i = 0; i < slots.length; i++) {
-        const currP = baselineLineup[i];
-        const optP = candidateLineup[i];
-        if (!optP) continue;
-        const currId = currP ? currP.playerId : '0';
-        const optId = optP ? optP.playerId : '0';
-        if (currId !== optId) {
-          const reasons = [];
-          const projDelta = Number(((optP.improvedProj || 0) - (currP ? currP.improvedProj || 0 : 0)).toFixed(2));
-          if (currId === '0' || (currP && currP.gameStatus === 'bye') || (currP && ['Out', 'IR', 'Doubtful'].includes(currP.injuryStatus))) {
-            reasons.push(`Fills open/inactive ${slots[i]} slot (+${projDelta.toFixed(2)} pts)`);
-          } else if (projDelta > 0) {
-            reasons.push(`+${projDelta.toFixed(2)} Vegas/market projection edge`);
-          } else if (projDelta < 0) {
-            reasons.push(`${projDelta.toFixed(2)} pts projection shift`);
-          }
-          if (optP.sportsbookProj && optP.sportsbookProj > optP.sleeperProj + 0.4) {
-            reasons.push(`Vegas props (${optP.sportsbookProj.toFixed(1)}) bullish vs Sleeper (${optP.sleeperProj.toFixed(1)})`);
-          }
+        const bp = baselineLineup[i];
+        const cp = candidateLineup[i];
+        if (bp && bp.playerId && bp.playerId !== '0') baseSlotByPid.set(bp.playerId, i);
+        if (cp && cp.playerId && cp.playerId !== '0') candSlotByPid.set(cp.playerId, i);
+      }
+
+      const visitedSlots = new Set();
+      const swaps = [];
+
+      const buildSwapReasons = (outP, inP, outSlotName, inSlotName, slideSteps, projDelta) => {
+        const reasons = [];
+        const outId = outP ? outP.playerId : '0';
+        if (slideSteps.length > 0) {
+          const slideDesc = slideSteps
+            .map((st) => {
+              const dualPos = (st.player.fantasyPositions || [st.player.position]).join('/');
+              return `Slide ${st.player.fullName} (${dualPos}) from ${st.fromSlot} ➔ ${st.toSlot}`;
+            })
+            .join(' • ');
+          reasons.push(`Double Swap: ${slideDesc}, then start ${inP.fullName} in ${inSlotName} (+${projDelta.toFixed(2)} net Vegas pts)`);
+        } else if (outId === '0' || (outP && outP.gameStatus === 'bye') || (outP && ['Out', 'IR', 'Doubtful'].includes(outP.injuryStatus))) {
+          reasons.push(`Fills open/inactive ${inSlotName} slot (+${projDelta.toFixed(2)} pts)`);
+        } else if (projDelta > 0) {
+          reasons.push(`+${projDelta.toFixed(2)} Vegas/market projection edge`);
+        } else if (projDelta < 0) {
+          reasons.push(`${projDelta.toFixed(2)} pts projection shift`);
+        }
+
+        if (inP && inP.sportsbookProj && inP.sportsbookProj > inP.sleeperProj + 0.4) {
+          reasons.push(`Vegas props (${inP.sportsbookProj.toFixed(1)}) bullish vs Sleeper (${inP.sleeperProj.toFixed(1)})`);
+        }
+        if (inP) {
           for (const otherP of candidateLineup) {
-            if (!otherP || otherP.playerId === '0' || otherP.playerId === optP.playerId) continue;
-            const c = computePairwisePlayerCorrelation(optP, otherP);
+            if (!otherP || otherP.playerId === '0' || otherP.playerId === inP.playerId) continue;
+            const c = computePairwisePlayerCorrelation(inP, otherP);
             if (c >= 0.14) {
               reasons.push(`Positive correlation stack with ${otherP.shortName} (ρ = +${c.toFixed(2)})`);
             }
           }
-          if (currP && currId !== '0') {
-            for (const otherP of candidateLineup) {
-              if (!otherP || otherP.playerId === '0' || otherP.playerId === optP.playerId) continue;
-              const cOld = computePairwisePlayerCorrelation(currP, otherP);
-              if (cOld <= -0.10) {
-                if (currP.team === otherP.team) {
-                  reasons.push(`Avoids ${currP.team} same-team cannibalization with ${otherP.shortName} (ρ = ${cOld.toFixed(2)})`);
-                } else {
-                  reasons.push(`Avoids ${currP.team}/${otherP.team} opposing RB game-script conflict with ${otherP.shortName} (ρ = ${cOld.toFixed(2)})`);
-                }
+        }
+        if (outP && outId !== '0') {
+          for (const otherP of candidateLineup) {
+            if (!otherP || otherP.playerId === '0' || (inP && otherP.playerId === inP.playerId)) continue;
+            const cOld = computePairwisePlayerCorrelation(outP, otherP);
+            if (cOld <= -0.10) {
+              if (outP.team === otherP.team) {
+                reasons.push(`Avoids ${outP.team} same-team cannibalization with ${otherP.shortName} (ρ = ${cOld.toFixed(2)})`);
+              } else {
+                reasons.push(`Avoids ${outP.team}/${otherP.team} opposing RB game-script conflict with ${otherP.shortName} (ρ = ${cOld.toFixed(2)})`);
               }
             }
           }
-
-          swaps.push({
-            slotIndex: i,
-            slot: slots[i],
-            outPlayer: currP,
-            inPlayer: optP,
-            isTrueAddition: !baseIds.has(optId),
-            isTrueRemoval: currId === '0' || !candIds.has(currId),
-            projDelta,
-            reasons,
-            summaryReason: reasons.join(' • ') || 'Optimizes joint simulation win probability & volatility'
-          });
         }
+        return reasons;
+      };
+
+      // Pass 1: Trace chains starting from every slot where the baseline player is truly removed (benched or empty)
+      for (let i = 0; i < slots.length; i++) {
+        if (visitedSlots.has(i)) continue;
+        const currP = baselineLineup[i];
+        const optP = candidateLineup[i];
+        const currId = currP ? currP.playerId : '0';
+        const optId = optP ? optP.playerId : '0';
+        if (currId === optId) {
+          visitedSlots.add(i);
+          continue;
+        }
+
+        const isStartTrueRemoval = currId === '0' || !candIds.has(currId);
+        if (!isStartTrueRemoval) continue;
+
+        visitedSlots.add(i);
+        const outSlotIndex = i;
+        const outSlot = slots[i];
+        const outPlayer = currP;
+        const slideSteps = [];
+        const involvedSlotIndices = [i];
+
+        let curSlotIdx = i;
+        let incomingP = candidateLineup[curSlotIdx];
+        let safety = 0;
+
+        // If incomingP was already starting in baselineLineup at another slot `prevSlotIdx`, trace the positional slide chain!
+        while (
+          incomingP &&
+          incomingP.playerId &&
+          incomingP.playerId !== '0' &&
+          baseIds.has(incomingP.playerId) &&
+          safety < slots.length
+        ) {
+          safety++;
+          const prevSlotIdx = baseSlotByPid.get(incomingP.playerId);
+          if (prevSlotIdx === undefined || prevSlotIdx === curSlotIdx || visitedSlots.has(prevSlotIdx)) {
+            break;
+          }
+          slideSteps.push({
+            player: incomingP,
+            fromSlotIndex: prevSlotIdx,
+            fromSlot: slots[prevSlotIdx],
+            toSlotIndex: curSlotIdx,
+            toSlot: slots[curSlotIdx],
+            dualPositions: (incomingP.fantasyPositions || [incomingP.position]).join('/')
+          });
+          visitedSlots.add(prevSlotIdx);
+          involvedSlotIndices.push(prevSlotIdx);
+          curSlotIdx = prevSlotIdx;
+          incomingP = candidateLineup[curSlotIdx];
+        }
+
+        const inSlotIndex = curSlotIdx;
+        const inSlot = slots[inSlotIndex];
+        const inPlayer = incomingP;
+        const inId = inPlayer ? inPlayer.playerId : '0';
+
+        const projDelta = Number((((inPlayer && inPlayer.improvedProj) || 0) - ((outPlayer && outPlayer.improvedProj) || 0)).toFixed(2));
+        const sleeperDelta = Number((((inPlayer && inPlayer.sleeperProj) || 0) - ((outPlayer && outPlayer.sleeperProj) || 0)).toFixed(2));
+        const reasons = buildSwapReasons(outPlayer, inPlayer, outSlot, inSlot, slideSteps, projDelta);
+
+        swaps.push({
+          slotIndex: outSlotIndex,
+          outSlotIndex,
+          inSlotIndex,
+          slot: slideSteps.length > 0 ? `${outSlot} ⇄ ${inSlot}` : outSlot,
+          outSlot,
+          inSlot,
+          outPlayer,
+          inPlayer,
+          isDoubleSwap: slideSteps.length > 0,
+          slideSteps,
+          involvedSlotIndices,
+          isTrueAddition: inId !== '0' && !baseIds.has(inId),
+          isTrueRemoval: currId === '0' || !candIds.has(currId),
+          projDelta,
+          sleeperDelta,
+          reasons,
+          summaryReason: reasons.join(' • ') || 'Optimizes joint simulation win probability & volatility'
+        });
       }
+
+      // Pass 2: Any remaining unvisited changed slots (pure internal starter position swaps with no bench change)
+      for (let i = 0; i < slots.length; i++) {
+        if (visitedSlots.has(i)) continue;
+        const currP = baselineLineup[i];
+        const optP = candidateLineup[i];
+        const currId = currP ? currP.playerId : '0';
+        const optId = optP ? optP.playerId : '0';
+        if (currId === optId) continue;
+        visitedSlots.add(i);
+        const projDelta = Number((((optP && optP.improvedProj) || 0) - ((currP && currP.improvedProj) || 0)).toFixed(2));
+        swaps.push({
+          slotIndex: i,
+          outSlotIndex: i,
+          inSlotIndex: i,
+          slot: slots[i],
+          outSlot: slots[i],
+          inSlot: slots[i],
+          outPlayer: currP,
+          inPlayer: optP,
+          isDoubleSwap: false,
+          slideSteps: [],
+          involvedSlotIndices: [i],
+          isTrueAddition: optId !== '0' && !baseIds.has(optId),
+          isTrueRemoval: currId === '0' || !candIds.has(currId),
+          projDelta,
+          sleeperDelta: 0,
+          reasons: ['Internal positional slot swap'],
+          summaryReason: 'Internal positional slot swap'
+        });
+      }
+
       return swaps;
     }
 
