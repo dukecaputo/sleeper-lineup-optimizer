@@ -1082,10 +1082,12 @@
       let activeCustomLineup = null;
       let activePresetId = 'optimal';
 
-      // Point live tracker link correctly if hosted on GitHub Pages
+      // Point live tracker link correctly if hosted on GitHub Pages or local LAN
       const liveLink = document.getElementById('liveTrackerLink');
       if (window.location.hostname.includes('github.io')) {
-        liveLink.href = 'https://dukecaputo.github.io/sleeper-live-tracker/';
+        liveLink.href = './tracker/';
+      } else if (window.location.hostname && window.location.hostname !== 'localhost') {
+        liveLink.href = `http://${window.location.hostname}:3456`;
       }
 
       // Mobile Filter Drawer Toggle
