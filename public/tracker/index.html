@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FANTASYCAST FOOTBALL — Fantasy Fortèball Live Matchup & Median Tracker</title>
+  <title>FORTEBALL FANTASYCAST — Live Matchup & Median Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="./engine.js?v=20261108_lock_v1"></script>
   <style>
@@ -230,19 +230,12 @@
           <div class="min-w-0">
             <div class="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
               <h1 class="fc-banner-title text-lg sm:text-3xl font-bold text-white leading-none truncate">
-                FANTASYCAST FOOTBALL
+                FORTEBALL FANTASYCAST
               </h1>
               <span id="season-badge" class="px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold rounded bg-[#073b12] text-[#86efac] border border-[#2ec94e]/50 font-mono-num">
                 2026 • Week 9
               </span>
             </div>
-            <p class="text-[11px] sm:text-xs text-[#dcfae2] font-semibold mt-0.5 flex items-center gap-1 sm:gap-1.5 truncate drop-shadow-[0_1px_1px_rgba(0,0,0,0.6)]">
-              <span id="league-name" class="font-bold text-white">Fantasy Fortèball</span>
-              <span>|</span>
-              <span class="text-[#fff380] font-bold">Hoon Lounge Hooners</span>
-              <span class="hidden md:inline opacity-75">•</span>
-              <span class="hidden md:inline text-[11px] opacity-90">ID: <code id="league-id-display" class="font-mono-num">1312258310212165632</code></span>
-            </p>
           </div>
         </div>
 
@@ -269,13 +262,6 @@
             <select id="week-select" onchange="onWeekChange()" class="bg-transparent text-[11px] sm:text-xs font-bold text-white focus:outline-none cursor-pointer">
             </select>
           </div>
-
-          <button onclick="toggleAutoSubMode()" id="autosub-toggle-btn"
-                  title="Automatically substitute BYE or OUT starters with highest-projected eligible bench players for future weeks"
-                  class="fc-black-pill px-2 py-1 rounded text-[11px] sm:text-xs font-semibold flex items-center gap-1 shrink-0">
-            <span>⚡ Auto-Sub:</span>
-            <span id="autosub-state-label" class="font-bold text-[#94a3b8]">OFF</span>
-          </button>
 
           <button onclick="toggleComparisonMode()" id="compare-toggle-btn"
                   class="fc-black-pill px-2 py-1 rounded text-[11px] sm:text-xs font-semibold flex items-center gap-1 shrink-0">
@@ -678,26 +664,6 @@
       });
     }
 
-    function updateAutoSubButtonUI() {
-      const btn = document.getElementById('autosub-toggle-btn');
-      const lbl = document.getElementById('autosub-state-label');
-      if (autoSubByeOut) {
-        btn.className = 'fc-black-pill px-2 py-1 rounded text-[11px] sm:text-xs font-semibold flex items-center gap-1 border !border-[#e8c500] shrink-0';
-        lbl.textContent = 'ON';
-        lbl.className = 'font-bold text-[#ffe600]';
-      } else {
-        btn.className = 'fc-black-pill px-2 py-1 rounded text-[11px] sm:text-xs font-semibold flex items-center gap-1 shrink-0';
-        lbl.textContent = 'OFF';
-        lbl.className = 'font-bold text-[#94a3b8]';
-      }
-    }
-
-    function toggleAutoSubMode() {
-      autoSubByeOut = !autoSubByeOut;
-      updateAutoSubButtonUI();
-      fetchLiveState(false);
-    }
-
     function toggleComparisonMode() {
       showSleeperComparison = !showSleeperComparison;
       document.getElementById('compare-state-label').textContent = showSleeperComparison ? 'ON' : 'OFF';
@@ -718,14 +684,6 @@
     function onWeekChange() {
       const newWeek = Number(document.getElementById('week-select').value);
       selectedWeek = newWeek;
-      // Automatically turn on Smart BYE/OUT Auto-Sub when looking at future weeks
-      if (lastKnownNflWeek && newWeek > lastKnownNflWeek && !autoSubByeOut) {
-        autoSubByeOut = true;
-        updateAutoSubButtonUI();
-      } else if (lastKnownNflWeek && newWeek <= lastKnownNflWeek && autoSubByeOut) {
-        autoSubByeOut = false;
-        updateAutoSubButtonUI();
-      }
       fetchLiveState(true);
     }
 
@@ -1619,9 +1577,8 @@
     }
 
     function renderAll(data) {
-      document.getElementById('league-name').textContent = data.league.name;
-      document.getElementById('league-id-display').textContent = data.league.leagueId;
-      document.getElementById('season-badge').textContent = `${data.league.season} • Week ${data.league.week}`;
+      const sbEl = document.getElementById('season-badge');
+      if (sbEl) sbEl.textContent = `${data.league.season} • Week ${data.league.week}`;
 
       populateWeekDropdown(data.league.currentNflWeek, data.league.week);
 
