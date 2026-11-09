@@ -198,77 +198,62 @@
 <body class="min-h-screen flex flex-col pb-16 md:pb-0 selection:bg-[#e8c500]/30 selection:text-[#e8c500]">
 
   <!-- CLASSIC ESPN FANTASYCAST GREEN BANNER HEADER -->
-  <header class="sticky top-0 z-30 fc-green-header px-2.5 sm:px-5 py-1.5 sm:py-2">
-    <div class="max-w-[1600px] mx-auto flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-1.5 sm:gap-3">
-      <!-- Top Row on Mobile / Left on Desktop: Crest + Title + Mobile Quick Sync -->
-      <div class="flex items-center justify-between sm:justify-start gap-2 sm:gap-3">
-        <div class="flex items-center gap-2 sm:gap-3 min-w-0">
-          <!-- Classic ESPN Fantasy Football Crest SVG -->
-          <div class="w-9 h-9 sm:w-12 sm:h-12 shrink-0 flex items-center justify-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.65)]">
-            <svg viewBox="0 0 64 64" class="w-9 h-9 sm:w-12 sm:h-12">
-              <defs>
-                <linearGradient id="shieldMetal" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#ffffff"/>
-                  <stop offset="50%" stop-color="#cbd5e1"/>
-                  <stop offset="100%" stop-color="#64748b"/>
-                </linearGradient>
-                <linearGradient id="shieldGreen" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#0d521c"/>
-                  <stop offset="100%" stop-color="#05260b"/>
-                </linearGradient>
-              </defs>
-              <!-- Outer Shield -->
-              <path d="M8 10 L32 4 L56 10 L52 40 C50 51 32 59 32 59 C32 59 14 51 12 40 Z" fill="url(#shieldMetal)" stroke="#041f09" stroke-width="2"/>
-              <path d="M11 12.5 L32 7 L53 12.5 L49.5 39 C47.8 48.5 32 55.5 32 55.5 C32 55.5 16.2 48.5 14.5 39 Z" fill="url(#shieldGreen)" stroke="#1fa33c" stroke-width="1.2"/>
-              <!-- FANTASY Banner Text -->
-              <text x="32" y="21" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-weight="900" font-size="7.5" letter-spacing="0.8">FANTASY</text>
-              <!-- Football Icon -->
-              <ellipse cx="32" cy="36" rx="13" ry="8.2" fill="#e2e8f0" stroke="#041f09" stroke-width="1.5"/>
-              <path d="M22 36 L42 36 M26 33 L26 39 M30 33 L30 39 M34 33 L34 39 M38 33 L38 39" stroke="#093814" stroke-width="1.4" stroke-linecap="round"/>
-            </svg>
-          </div>
-          <div class="min-w-0">
-            <div class="flex items-center gap-1.5 sm:gap-2.5 flex-wrap">
-              <h1 class="fc-banner-title text-lg sm:text-3xl font-bold text-white leading-none truncate">
-                FORTEBALL FANTASYCAST
-              </h1>
-              <span id="season-badge" class="px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold rounded bg-[#073b12] text-[#86efac] border border-[#2ec94e]/50 font-mono-num">
-                2026 • Week 9
-              </span>
-            </div>
-          </div>
+  <header class="sticky top-0 z-30 fc-green-header px-2 sm:px-5 py-1.5 sm:py-2">
+    <div class="max-w-[1600px] mx-auto flex items-center justify-between gap-2 sm:gap-3">
+      <!-- Left: Crest + Title -->
+      <div class="flex items-center gap-1.5 sm:gap-3 min-w-0">
+        <!-- Classic ESPN Fantasy Football Crest SVG -->
+        <div class="w-8 h-8 sm:w-11 sm:h-11 shrink-0 flex items-center justify-center drop-shadow-[0_2px_4px_rgba(0,0,0,0.65)]">
+          <svg viewBox="0 0 64 64" class="w-8 h-8 sm:w-11 sm:h-11">
+            <defs>
+              <linearGradient id="shieldMetal" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#ffffff"/>
+                <stop offset="50%" stop-color="#cbd5e1"/>
+                <stop offset="100%" stop-color="#64748b"/>
+              </linearGradient>
+              <linearGradient id="shieldGreen" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#0d521c"/>
+                <stop offset="100%" stop-color="#05260b"/>
+              </linearGradient>
+            </defs>
+            <!-- Outer Shield -->
+            <path d="M8 10 L32 4 L56 10 L52 40 C50 51 32 59 32 59 C32 59 14 51 12 40 Z" fill="url(#shieldMetal)" stroke="#041f09" stroke-width="2"/>
+            <path d="M11 12.5 L32 7 L53 12.5 L49.5 39 C47.8 48.5 32 55.5 32 55.5 C32 55.5 16.2 48.5 14.5 39 Z" fill="url(#shieldGreen)" stroke="#1fa33c" stroke-width="1.2"/>
+            <!-- FANTASY Banner Text -->
+            <text x="32" y="21" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-weight="900" font-size="7.5" letter-spacing="0.8">FANTASY</text>
+            <!-- Football Icon -->
+            <ellipse cx="32" cy="36" rx="13" ry="8.2" fill="#e2e8f0" stroke="#041f09" stroke-width="1.5"/>
+            <path d="M22 36 L42 36 M26 33 L26 39 M30 33 L30 39 M34 33 L34 39 M38 33 L38 39" stroke="#093814" stroke-width="1.4" stroke-linecap="round"/>
+          </svg>
         </div>
-
-        <!-- Mobile-only quick sync pill -->
-        <button onclick="fetchLiveState(true)" class="sm:hidden fc-black-pill px-2 py-1 rounded text-[11px] font-bold flex items-center gap-1 shrink-0">
-          <span class="w-1.5 h-1.5 rounded-full bg-[#ffe600] live-dot"></span>
-          <span>Sync (<span class="font-mono-num" id="countdown-label-mobile">10s</span>)</span>
-        </button>
+        <div class="min-w-0 flex items-center gap-2">
+          <h1 class="fc-banner-title text-base sm:text-3xl font-bold text-white leading-none truncate">
+            FORTEBALL FANTASYCAST
+          </h1>
+          <span id="season-badge" class="hidden md:inline-block px-1.5 py-0.5 text-[11px] font-bold rounded bg-[#073b12] text-[#86efac] border border-[#2ec94e]/50 font-mono-num shrink-0">
+            2026 • Week 9
+          </span>
+        </div>
       </div>
 
-      <!-- Right Controls: Classic ESPN Glossy Black Dropdowns & Sync -->
-      <div class="flex flex-col sm:items-end gap-1">
-        <div class="hidden sm:flex items-center gap-3 text-[11px] text-[#e2fce6]">
-          <span class="flex items-center gap-1 font-semibold">
-            <span id="poll-indicator" class="w-2 h-2 rounded-full bg-[#ffe600] live-dot"></span>
-            Live 10k MC Auto-Sync (<span id="countdown-label" class="font-mono-num">10s</span>)
-          </span>
-          <button onclick="fetchLiveState(true)" class="underline hover:text-white font-bold">Refresh Now</button>
+      <!-- Top Right Controls: Wk Selector + vs Sleeper + Sync Tracker (All together in Top Right) -->
+      <div class="flex items-center gap-1 sm:gap-2 shrink-0">
+        <div class="fc-black-pill px-1.5 sm:px-2.5 py-1 rounded flex items-center gap-1 text-[10px] sm:text-xs shrink-0">
+          <label for="week-select" class="text-[#9ae6b4] font-bold uppercase text-[9.5px] sm:text-[10px]">Wk:</label>
+          <select id="week-select" onchange="onWeekChange()" class="bg-transparent text-[10.5px] sm:text-xs font-bold text-white focus:outline-none cursor-pointer">
+          </select>
         </div>
 
-        <div class="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar">
-          <div class="fc-black-pill px-2 py-1 rounded flex items-center gap-1 text-[11px] sm:text-xs shrink-0">
-            <label for="week-select" class="text-[#9ae6b4] font-bold uppercase text-[10px]">Wk:</label>
-            <select id="week-select" onchange="onWeekChange()" class="bg-transparent text-[11px] sm:text-xs font-bold text-white focus:outline-none cursor-pointer">
-            </select>
-          </div>
+        <button onclick="toggleComparisonMode()" id="compare-toggle-btn"
+                class="fc-black-pill px-1.5 sm:px-2.5 py-1 rounded text-[10.5px] sm:text-xs font-semibold flex items-center gap-1 shrink-0">
+          <span>vs Slp:</span>
+          <span id="compare-state-label" class="font-bold text-[#ffe600]">ON</span>
+        </button>
 
-          <button onclick="toggleComparisonMode()" id="compare-toggle-btn"
-                  class="fc-black-pill px-2 py-1 rounded text-[11px] sm:text-xs font-semibold flex items-center gap-1 shrink-0">
-            <span>vs Slp:</span>
-            <span id="compare-state-label" class="font-bold text-[#ffe600]">ON</span>
-          </button>
-        </div>
+        <button onclick="fetchLiveState(true)" class="fc-black-pill px-1.5 sm:px-2.5 py-1 rounded text-[10.5px] sm:text-xs font-bold flex items-center gap-1 shrink-0 hover:border-[#ffe600]" title="Sync Live Sleeper Scores Now">
+          <span id="poll-indicator" class="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-[#ffe600] live-dot"></span>
+          <span>Sync (<span class="font-mono-num" id="countdown-label">10s</span>)</span>
+        </button>
       </div>
     </div>
   </header>
