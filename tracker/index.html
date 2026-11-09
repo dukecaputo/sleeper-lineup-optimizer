@@ -261,7 +261,6 @@
             Live 10k MC Auto-Sync (<span id="countdown-label" class="font-mono-num">10s</span>)
           </span>
           <button onclick="fetchLiveState(true)" class="underline hover:text-white font-bold">Refresh Now</button>
-          <a href="../" id="standalone-opt-link" class="underline hover:text-[#ffe600] font-bold">Standalone Optimizer ↗</a>
         </div>
 
         <div class="flex items-center gap-1 sm:gap-1.5 overflow-x-auto no-scrollbar">
@@ -283,10 +282,6 @@
             <span>vs Slp:</span>
             <span id="compare-state-label" class="font-bold text-[#ffe600]">ON</span>
           </button>
-
-          <a href="../" id="mobile-opt-link" class="sm:hidden fc-black-pill px-2 py-1 rounded text-[11px] font-bold text-[#ffe600] shrink-0">
-            🎯 Optimizer ↗
-          </a>
         </div>
       </div>
     </div>
@@ -590,7 +585,7 @@
 
   <!-- STICKY BOTTOM MOBILE NAVIGATION BAR (ESPN FANTASYCAST DARK METAL + KELLY GREEN) -->
   <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#121417]/95 backdrop-blur border-t-2 border-[#24ab44] px-1.5 py-1 shadow-[0_-4px_14px_rgba(0,0,0,0.8)]">
-    <div class="grid grid-cols-4 gap-1">
+    <div class="grid grid-cols-3 gap-1">
       <button onclick="switchTab('matchups')" id="mob-nav-matchups" class="flex flex-col items-center justify-center py-1 rounded text-[10px] font-extrabold text-[#4ee468] bg-[#184711]/70 border border-[#2e8522]">
         <span class="text-sm leading-none">🏈</span>
         <span class="mt-0.5">Matchup</span>
@@ -603,10 +598,6 @@
         <span class="text-sm leading-none">📐</span>
         <span class="mt-0.5">Model</span>
       </button>
-      <a href="../" id="mob-bottom-opt-link" class="flex flex-col items-center justify-center py-1 rounded text-[10px] font-bold text-[#ffe600]">
-        <span class="text-sm leading-none">🎯</span>
-        <span class="mt-0.5">Optimizer ↗</span>
-      </a>
     </div>
   </nav>
 
@@ -1365,9 +1356,6 @@
                   <span class="text-xs text-[#bbf7d0] font-semibold">(${a.wins}-${a.losses})</span>
                   <span class="text-sm font-extrabold text-white ml-0.5">${a.teamName}</span>
                 </div>
-                <button onclick="openOptimizerForRoster(${a.rosterId})" class="px-1.5 py-0.5 rounded-xs bg-[#e8c500] text-black text-[10px] font-black uppercase hover:bg-[#ffe600] shrink-0">
-                  Opt
-                </button>
               </div>
               <!-- ESPN "To Play / In Play / Proj" Olive Bar -->
               <div class="bg-black/40 border border-[#326b26] px-2 py-1 text-[11px] font-bold text-[#e2f5e4] flex items-center justify-between flex-wrap gap-1">
@@ -1402,9 +1390,6 @@
                   <span class="text-xs text-[#bbf7d0] font-semibold">(${b.wins}-${b.losses})</span>
                   <span class="text-sm font-extrabold text-white ml-0.5">${b.teamName}</span>
                 </div>
-                <button onclick="openOptimizerForRoster(${b.rosterId})" class="px-1.5 py-0.5 rounded-xs bg-[#32363c] text-[#e2e8f0] border border-[#52575f] text-[10px] font-bold uppercase hover:text-white shrink-0">
-                  Opt
-                </button>
               </div>
               <!-- ESPN "To Play / In Play / Proj" Olive Bar -->
               <div class="bg-black/40 border border-[#326b26] px-2 py-1 text-[11px] font-bold text-[#e2f5e4] flex items-center justify-between flex-wrap gap-1">
