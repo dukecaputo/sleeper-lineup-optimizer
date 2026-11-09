@@ -811,6 +811,12 @@
     }
   }
 
+  function isPlayerLocked(playerObj) {
+    if (!playerObj || !playerObj.playerId || String(playerObj.playerId) === '0') return false;
+    if (playerObj.isLocked !== undefined) return Boolean(playerObj.isLocked);
+    return playerObj.gameStatus === 'in_game' || playerObj.gameStatus === 'complete';
+  }
+
   /**
    * Model a single player, incorporating:
    *  - Sleeper Rotowire pre-game projection (custom league scoring)
@@ -978,6 +984,7 @@
         isHome,
         injuryStatus,
         gameStatus: finalStatus,
+        isLocked: finalStatus === 'complete',
         gameId: isBye ? null : gameState.gameId,
         quarter: isBye ? 0 : gameState.quarter,
         clock: isBye ? 'BYE' : 'FINAL',
@@ -1171,6 +1178,7 @@
       isHome,
       injuryStatus,
       gameStatus: gameState.status,
+      isLocked: gameState.status === 'in_game' || gameState.status === 'complete',
       gameId: gameState.gameId,
       quarter: gameState.quarter,
       clock: gameState.clock,
@@ -2156,22 +2164,34 @@
     }
 
     // Generate candidate offensive + IDP lineups systematically:
-    // Lock any player whose game is already 'complete' or 'in_game' in their current starter slot!
+    // Lock ANY player (starter OR bench) whose game is already 'complete' or 'in_game'!
+    //  - Locked starters cannot be moved out of their current starting slot or slid to another slot.
+    //  - Locked bench players cannot be subbed into any starting slot.
+    const isHistPregame = Boolean(stateData.isHistoricalPregame);
     const rawStarters = targetRoster.rawStarters || targetRoster.starters;
+    const rawBench = targetRoster.rawBench || targetRoster.bench || [];
     const lockedSlots = new Array(slots.length).fill(null);
     const lockedPlayerIds = new Set();
 
-    for (let i = 0; i < slots.length; i++) {
-      const st = rawStarters[i];
-      if (st && st.playerId !== '0' && (st.gameStatus === 'complete' || st.gameStatus === 'in_game')) {
-        lockedSlots[i] = st;
-        lockedPlayerIds.add(st.playerId);
+    if (!isHistPregame) {
+      for (let i = 0; i < slots.length; i++) {
+        const st = rawStarters[i];
+        if (st && st.playerId !== '0' && isPlayerLocked(st)) {
+          lockedSlots[i] = { ...st, slot: slots[i], isLocked: true };
+          lockedPlayerIds.add(st.playerId);
+        }
+      }
+      for (const bp of rawBench) {
+        if (bp && bp.playerId !== '0' && isPlayerLocked(bp)) {
+          lockedPlayerIds.add(bp.playerId);
+        }
       }
     }
 
-    // Candidate pool by position for unlocked slots (excluding BYE and Out/IR)
+    // Candidate pool by position for unlocked slots (excluding locked players, BYE, and Out/IR)
     const activePool = rosterPool.filter((p) => {
       if (lockedPlayerIds.has(p.playerId)) return false;
+      if (!isHistPregame && isPlayerLocked(p)) return false;
       const isOut = ['Out', 'IR', 'Doubtful', 'Suspension', 'COV'].includes(p.injuryStatus);
       return p.gameStatus !== 'bye' && !isOut && p.improvedProj > 0.5;
     }).sort((a, b) => b.improvedProj - a.improvedProj);
@@ -2401,19 +2421,29 @@
     };
 
     // Align optimal lineup slot assignments with current starters so continuing starters stay in their original slots whenever valid
+    // while strictly keeping any locked starter (`lockedSlots[s]`) fixed in its exact slot `s`!
     function alignLineupSlotsWithCurrent(optLineup, currStarters) {
-      const realPlayers = optLineup.filter((p) => p && p.playerId && p.playerId !== '0');
-      const bestSlotAssign = new Array(slots.length).fill(null);
+      const currentSlotAssignment = new Array(slots.length).fill(null);
+      const lockedStarterIds = new Set();
+      for (let s = 0; s < slots.length; s++) {
+        if (lockedSlots[s]) {
+          currentSlotAssignment[s] = { ...lockedSlots[s], slot: slots[s] };
+          lockedStarterIds.add(lockedSlots[s].playerId);
+        }
+      }
+
+      const realPlayers = optLineup.filter(
+        (p) => p && p.playerId && p.playerId !== '0' && !lockedStarterIds.has(p.playerId)
+      );
+      const bestSlotAssign = currentSlotAssignment.slice();
       let bestMatchScore = -1;
 
-      // Sort players so more constrained positions are placed first
+      // Sort unlocked players so more constrained positions are placed first
       const orderedPlayers = [...realPlayers].sort((a, b) => {
-        const eligA = slots.filter((s) => isEligibleForSlot(a, s)).length;
-        const eligB = slots.filter((s) => isEligibleForSlot(b, s)).length;
+        const eligA = slots.filter((s, idx) => !lockedSlots[idx] && isEligibleForSlot(a, s)).length;
+        const eligB = slots.filter((s, idx) => !lockedSlots[idx] && isEligibleForSlot(b, s)).length;
         return eligA - eligB;
       });
-
-      const currentSlotAssignment = new Array(slots.length).fill(null);
 
       function backtrackAssign(pIdx, matchScore) {
         if (matchScore + (orderedPlayers.length - pIdx) * 10 <= bestMatchScore) return;
@@ -2428,7 +2458,7 @@
         }
 
         const p = orderedPlayers[pIdx];
-        // Prefer slots where p is currently starting in currStarters
+        // Prefer unlocked slots where p is currently starting in currStarters
         const candidateSlots = [];
         for (let s = 0; s < slots.length; s++) {
           if (currentSlotAssignment[s] !== null) continue;
@@ -2774,6 +2804,7 @@
         let bestReplaceIdx = -1;
         let lowestPts = Infinity;
         for (let s = 0; s < slots.length; s++) {
+          if (lockedSlots[s]) continue;
           if (!isEligibleForSlot(stackP, slots[s])) continue;
           const currInSlot = tempLineup[s];
           if (currInSlot && currInSlot.team === tm) continue;
@@ -2843,6 +2874,9 @@
       lineupPresets,
       evaluateCustomLineup,
       isEligibleForSlot,
+      isPlayerLocked,
+      lockedSlots,
+      lockedStarterCount: lockedSlots.filter(Boolean).length,
       recommendedSwaps,
       rosterCorrMatrix,
       allRosterPlayers: rosterPool.sort((a, b) => b.improvedProj - a.improvedProj)
@@ -2959,6 +2993,7 @@
         let bestCandidate = null;
         for (const b of availableBench) {
           if (usedBenchIds.has(b.playerId)) continue;
+          if (isPlayerLocked(b)) continue;
           const bOut = ['Out', 'IR', 'Doubtful', 'Suspension', 'COV'].includes(b.injuryStatus);
           if (b.gameStatus === 'bye' || bOut || b.improvedProj <= 0.5) continue;
           if (isEligibleForSlot(b, slot)) {
@@ -3783,14 +3818,22 @@
   function analyzeWaiverIdpUpgrades(stateData, targetRosterId = 3, optimizerResult = null) {
     if (!stateData || !stateData.rostersData) return null;
     const roster = stateData.rostersData.find((r) => r.rosterId === Number(targetRosterId)) || stateData.rostersData[0];
-    const waiverPool = stateData.waiverIdpPlayers || [];
+    const isHistoricalPregame = Boolean(stateData.isHistoricalPregame);
+    const rawWaiverPool = stateData.waiverIdpPlayers || [];
+    const waiverPool = isHistoricalPregame
+      ? rawWaiverPool
+      : rawWaiverPool.filter((wp) => !isPlayerLocked(wp) && wp.gameStatus === 'pre_game');
     const idpSlots = ['DL', 'LB', 'DB', 'IDP_FLEX'];
 
     // Extract current 4 IDP starter slots from rawStarters
     const currentIdpSlotPlayers = {};
+    const lockedIdpSlotPlayers = {};
     for (const st of (roster.rawStarters || [])) {
       if (idpSlots.includes(st.slot)) {
         currentIdpSlotPlayers[st.slot] = st;
+        if (!isHistoricalPregame && isPlayerLocked(st)) {
+          lockedIdpSlotPlayers[st.slot] = st;
+        }
       }
     }
     for (const s of idpSlots) {
@@ -3816,7 +3859,10 @@
       }
     }
 
-    const rosterIdps = [...(roster.rawStarters || []), ...(roster.rawBench || [])].filter(
+    const rosterIdps = [
+      ...(roster.rawStarters || []),
+      ...(roster.rawBench || []).filter((p) => isHistoricalPregame || !isPlayerLocked(p))
+    ].filter(
       (p) => p && p.playerId !== '0' && (['DL', 'LB', 'DB'].includes(p.canonicalPos) || isEligibleForSlot(p, 'IDP_FLEX'))
     );
 
@@ -3824,11 +3870,11 @@
     const getBlendPts = (p) => Number(p?.improvedProj ?? 0);
     const getSlpPts = (p) => Number(p?.sleeperProj ?? 0);
 
-    // Solve optimal assignment of up to 4 IDP players across ['DL', 'LB', 'DB', 'IDP_FLEX']
+    // Solve optimal assignment of up to 4 IDP players across ['DL', 'LB', 'DB', 'IDP_FLEX'],
+    // respecting any locked IDP starter slots!
     const solveBest4IdpUnit = (candidatePlayers) => {
       let bestScore = -1;
       let bestAssign = null;
-      const n = candidatePlayers.length;
 
       // Include a dummy Empty player so fewer than 4 players still works cleanly
       const pool = [
@@ -3850,19 +3896,19 @@
 
       for (let i0 = 0; i0 < pool.length; i0++) {
         const p0 = pool[i0];
-        if (!p0.isEmpty && !isEligibleForSlot(p0, 'DL')) continue;
+        if (lockedIdpSlotPlayers.DL ? p0.playerId !== lockedIdpSlotPlayers.DL.playerId : (!p0.isEmpty && !isEligibleForSlot(p0, 'DL'))) continue;
         for (let i1 = 0; i1 < pool.length; i1++) {
           if (i1 === i0) continue;
           const p1 = pool[i1];
-          if (!p1.isEmpty && !isEligibleForSlot(p1, 'LB')) continue;
+          if (lockedIdpSlotPlayers.LB ? p1.playerId !== lockedIdpSlotPlayers.LB.playerId : (!p1.isEmpty && !isEligibleForSlot(p1, 'LB'))) continue;
           for (let i2 = 0; i2 < pool.length; i2++) {
             if (i2 === i0 || i2 === i1) continue;
             const p2 = pool[i2];
-            if (!p2.isEmpty && !isEligibleForSlot(p2, 'DB')) continue;
+            if (lockedIdpSlotPlayers.DB ? p2.playerId !== lockedIdpSlotPlayers.DB.playerId : (!p2.isEmpty && !isEligibleForSlot(p2, 'DB'))) continue;
             for (let i3 = 0; i3 < pool.length; i3++) {
               if (i3 === i0 || i3 === i1 || i3 === i2) continue;
               const p3 = pool[i3];
-              if (!p3.isEmpty && !isEligibleForSlot(p3, 'IDP_FLEX')) continue;
+              if (lockedIdpSlotPlayers.IDP_FLEX ? p3.playerId !== lockedIdpSlotPlayers.IDP_FLEX.playerId : (!p3.isEmpty && !isEligibleForSlot(p3, 'IDP_FLEX'))) continue;
               const score = getBlendPts(p0) + getBlendPts(p1) + getBlendPts(p2) + getBlendPts(p3) + 0.01 * (getMktPts(p0) + getMktPts(p1) + getMktPts(p2) + getMktPts(p3));
               if (score > bestScore) {
                 bestScore = score;
@@ -3935,22 +3981,26 @@
     // Slot-by-slot direct comparison against each of the 4 current IDP starters
     const slotComparisons = idpSlots.map((slot) => {
       const currP = currentIdpSlotPlayers[slot];
+      const slotLocked = Boolean(lockedIdpSlotPlayers[slot]);
       const currMkt = getMktPts(currP);
       const currBlend = getBlendPts(currP);
       const currSlp = getSlpPts(currP);
 
-      const betterOnWaivers = waiverPool
-        .filter((wp) => isEligibleForSlot(wp, slot) && (getMktPts(wp) > currMkt || getBlendPts(wp) > currBlend))
-        .map((wp) => ({
-          ...wp,
-          edgeMkt: Number((getMktPts(wp) - currMkt).toFixed(2)),
-          edgeBlend: Number((getBlendPts(wp) - currBlend).toFixed(2)),
-          edgeSlp: Number((getSlpPts(wp) - currSlp).toFixed(2))
-        }))
-        .sort((a, b) => b.edgeBlend - a.edgeBlend || b.edgeMkt - a.edgeMkt);
+      const betterOnWaivers = slotLocked
+        ? []
+        : waiverPool
+            .filter((wp) => isEligibleForSlot(wp, slot) && (getMktPts(wp) > currMkt || getBlendPts(wp) > currBlend))
+            .map((wp) => ({
+              ...wp,
+              edgeMkt: Number((getMktPts(wp) - currMkt).toFixed(2)),
+              edgeBlend: Number((getBlendPts(wp) - currBlend).toFixed(2)),
+              edgeSlp: Number((getSlpPts(wp) - currSlp).toFixed(2))
+            }))
+            .sort((a, b) => b.edgeBlend - a.edgeBlend || b.edgeMkt - a.edgeMkt);
 
       return {
         slot,
+        slotLocked,
         currentStarter: currP,
         currMkt,
         currBlend,
@@ -4712,6 +4762,7 @@
     runSimulationLineupOptimizer,
     analyzeWaiverIdpUpgrades,
     computePairwisePlayerCorrelation,
-    isEligibleForSlot
+    isEligibleForSlot,
+    isPlayerLocked
   };
 });

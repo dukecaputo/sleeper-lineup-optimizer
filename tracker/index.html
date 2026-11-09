@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FANTASYCAST FOOTBALL — Fantasy Fortèball Live Matchup & Median Tracker</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="./engine.js"></script>
+  <script src="./engine.js?v=20261108_lock_v1"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@600;700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap');
 
@@ -330,19 +330,34 @@
     </div>
   </div>
 
-  <!-- LIVE NFL SCOREBOARD STRIP -->
-  <div class="bg-[#0e1012] border-b border-[#2a2e34] px-2.5 sm:px-5 py-1 overflow-x-auto no-scrollbar">
+  <!-- LIVE NFL SCOREBOARD STRIP (Hidden on compact mobile phones so Matchup Board is immediately visible) -->
+  <div class="hidden sm:block bg-[#0e1012] border-b border-[#2a2e34] px-2.5 sm:px-5 py-1 overflow-x-auto no-scrollbar">
     <div id="nfl-ticker" class="max-w-[1600px] mx-auto flex items-center gap-2 min-w-max">
       <span class="text-xs text-slate-400">Syncing live NFL game clocks & lineups from Sleeper...</span>
     </div>
   </div>
 
   <!-- TOP SUMMARY BANNER: ESPN FANTASYCAST MEDIAN CUTOFF SCOREBOARD -->
-  <section class="max-w-[1600px] w-full mx-auto px-2.5 sm:px-5 pt-2 sm:pt-3">
-    <div class="fc-metal-card rounded p-2.5 sm:p-3">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-2.5 sm:gap-3 items-center">
-        <!-- Left: True Expected Median vs Sleeper Static Median (Side-by-side 2-col grid even on mobile!) -->
-        <div class="lg:col-span-5 grid grid-cols-2 gap-2 lg:border-r border-[#3a3f47] lg:pr-3">
+  <section class="max-w-[1600px] w-full mx-auto px-2 sm:px-5 pt-1.5 sm:pt-3">
+    <div class="fc-metal-card rounded p-1.5 sm:p-3">
+      <!-- Sleek 1-Row Mobile Median Cutoff Strip (< 640px) -->
+      <div class="sm:hidden flex items-center justify-between gap-1.5 px-1 py-0.5">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="px-1.5 py-0.5 rounded-xs bg-[#184711] text-[#86efac] border border-[#2e8522] text-[9px] font-black uppercase shrink-0">Top-5 Med</span>
+          <span id="banner-imp-median-mob" class="text-sm font-black font-mono-num text-[#ffe600]">--</span>
+          <span class="text-[10px] text-[#9ca3af] font-mono-num truncate">(Slp: <span id="banner-slp-median-mob">--</span>)</span>
+        </div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button onclick="toggleMobileBubbleDrawer()" id="mobile-bubble-toggle-btn" class="text-[10px] font-extrabold text-[#4ee468] flex items-center gap-0.5">
+            <span>Bubble #4–#7 ▾</span>
+          </button>
+          <button onclick="switchTab('median')" class="text-[10px] text-[#ffe600] font-bold underline">Board →</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-3 items-center">
+        <!-- Left: True Expected Median vs Sleeper Static Median (Desktop/Tablet) -->
+        <div class="hidden sm:grid lg:col-span-5 grid-cols-2 gap-2 lg:border-r border-[#3a3f47] lg:pr-3">
           <div class="fc-inset-box rounded px-2.5 sm:px-3.5 py-1.5 sm:py-2 border-l-4 !border-l-[#e8c500]">
             <div class="flex items-center justify-between gap-1">
               <span class="text-[10px] sm:text-[11px] font-extrabold uppercase tracking-wider text-[#e8c500] truncate">True Top-5 Median</span>
@@ -367,9 +382,9 @@
           </div>
         </div>
 
-        <!-- Mobile-only Collapsible Toggle for Bubble Report (#4–#7) -->
-        <div class="lg:hidden flex items-center justify-between pt-1 border-t border-[#3a3f47]">
-          <button onclick="toggleMobileBubbleDrawer()" id="mobile-bubble-toggle-btn" class="text-[11px] font-extrabold text-[#4ee468] flex items-center gap-1">
+        <!-- Tablet-only Collapsible Toggle for Bubble Report (#4–#7) -->
+        <div class="hidden sm:flex lg:hidden items-center justify-between pt-1 border-t border-[#3a3f47]">
+          <button onclick="toggleMobileBubbleDrawer()" class="text-[11px] font-extrabold text-[#4ee468] flex items-center gap-1">
             <span>🏈 Show Median Bubble (#4–#7) &amp; Insight ▾</span>
           </button>
           <button onclick="switchTab('median')" class="text-[11px] text-[#ffe600] font-bold">Full Median Board →</button>
@@ -398,17 +413,13 @@
   </section>
 
   <!-- MAIN CONTENT AREA -->
-  <main class="max-w-[1600px] w-full mx-auto px-2 sm:px-5 py-2.5 sm:py-3 flex-1">
+  <main class="max-w-[1600px] w-full mx-auto px-1.5 sm:px-5 py-1.5 sm:py-3 flex-1">
 
     <!-- TAB 1: LIVE MATCHUPS (CLASSIC ESPN FANTASYCAST SPLIT VIEW) -->
-    <div id="tab-content-matchups" class="grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 items-start">
-      <!-- Mobile-Only Horizontal Matchup Switcher Carousel (Appears right above the H2H Turf Board on phones!) -->
-      <div class="lg:hidden order-1 bg-[#0c0e10] border border-[#2a2e33] rounded p-2 shadow-lg">
-        <div class="flex items-center justify-between text-[10px] font-extrabold uppercase tracking-wider text-[#9ae6b4] mb-1.5 px-0.5">
-          <span>TAP A MATCHUP TO WATCH (5 GAMES)</span>
-          <a href="#matchups-scoreboard-box" class="text-[#ffe600] underline">All Games &amp; NFL Box ↓</a>
-        </div>
-        <div id="mobile-matchup-strip" class="flex items-center gap-2 overflow-x-auto no-scrollbar pb-0.5"></div>
+    <div id="tab-content-matchups" class="grid grid-cols-1 lg:grid-cols-12 gap-2 sm:gap-4 items-start">
+      <!-- Mobile-Only Horizontal Matchup Switcher Carousel (Sleeper / ESPN style pill strip) -->
+      <div class="lg:hidden order-1 bg-[#0c0e10] border border-[#2a2e33] rounded px-2 py-1.5 shadow-lg">
+        <div id="mobile-matchup-strip" class="flex items-center gap-1.5 overflow-x-auto no-scrollbar"></div>
       </div>
 
       <!-- Right Column on Desktop / FIRST on Mobile: Selected Matchup Head-to-Head Turf Field Board (7 cols) -->
@@ -642,11 +653,11 @@
         if (mobileBubbleOpen) {
           insCol.classList.remove('hidden');
           bubCol.classList.remove('hidden');
-          btn.innerHTML = '<span>🏈 Hide Median Bubble (#4–#7) &amp; Insight ▴</span>';
+          btn.innerHTML = '<span>Bubble #4–#7 ▴</span>';
         } else {
           insCol.classList.add('hidden');
           bubCol.classList.add('hidden');
-          btn.innerHTML = '<span>🏈 Show Median Bubble (#4–#7) &amp; Insight ▾</span>';
+          btn.innerHTML = '<span>Bubble #4–#7 ▾</span>';
         }
       }
     }
@@ -740,7 +751,7 @@
     }
 
     /**
-     * Interactive What-If Bench Swap: swap a bench player into a compatible starter slot in 12ms!
+     * Interactive What-If Bench Swap: swap an unlocked bench player into an unlocked compatible starter slot in 12ms!
      */
     function performWhatIfSwap(rosterId, benchPlayerId, starterIdx) {
       if (!currentState || !currentState.rostersData) return;
@@ -752,6 +763,12 @@
       const oldStarter = { ...r.starters[starterIdx] };
       const newStarter = { ...r.bench[bIdx] };
       const targetSlot = oldStarter.slot;
+
+      const isLockedFn = window.SleeperTrackerEngine.isPlayerLocked || ((p) => p && (p.gameStatus === 'in_game' || p.gameStatus === 'complete'));
+      if (!currentState.isHistoricalPregame && (isLockedFn(oldStarter) || isLockedFn(newStarter))) {
+        alert('Players whose games have already started or finished are locked and cannot be subbed in or out.');
+        return;
+      }
 
       if (!window.SleeperTrackerEngine.isEligibleForSlot(newStarter, targetSlot)) {
         alert(`${newStarter.fullName} (${newStarter.position}) is not eligible for the ${targetSlot} slot.`);
@@ -838,6 +855,10 @@
       const med = data.leagueMedian;
       document.getElementById('banner-imp-median').textContent = med.expectedMedianImproved.toFixed(2);
       document.getElementById('banner-slp-median').textContent = med.staticMedianSleeper.toFixed(2);
+      const mobImpEl = document.getElementById('banner-imp-median-mob');
+      const mobSlpEl = document.getElementById('banner-slp-median-mob');
+      if (mobImpEl) mobImpEl.textContent = med.expectedMedianImproved.toFixed(2);
+      if (mobSlpEl) mobSlpEl.textContent = med.staticMedianSleeper.toFixed(2);
       document.getElementById('table-target-median').textContent = med.expectedMedianImproved.toFixed(2);
 
       const diff = med.medianDiffVsSleeper;
@@ -913,20 +934,16 @@
           const isMyMatchup = a.rosterId === 3 || b.rosterId === 3;
           return `
             <button onclick="selectMatchup(${m.matchupId}, false)"
-                    class="shrink-0 min-w-[144px] rounded-sm px-2.5 py-1.5 text-left transition-all ${
+                    class="shrink-0 min-w-[122px] rounded-sm px-2 py-1 text-left transition-all ${
                       isSelected ? 'fc-metal-card-selected' : 'fc-metal-card'
                     }">
-              <div class="flex items-center justify-between text-[10px] font-mono-num">
-                <span class="font-extrabold ${a.rosterId === 3 ? 'text-[#ffe600]' : 'text-white'} truncate max-w-[78px]">${isMyMatchup && a.rosterId === 3 ? '★ ' : ''}${abbr(a.teamName)}</span>
+              <div class="flex items-center justify-between text-[10px] font-mono-num gap-1.5">
+                <span class="font-extrabold ${a.rosterId === 3 ? 'text-[#ffe600]' : 'text-white'} truncate max-w-[68px]">${isMyMatchup && a.rosterId === 3 ? '★' : ''}${abbr(a.teamName)}</span>
                 <span class="font-bold text-white">${a.currentPts === 0 ? a.improvedTotalProj.toFixed(1) : a.currentPts.toFixed(1)}</span>
               </div>
-              <div class="flex items-center justify-between text-[10px] font-mono-num mt-0.5">
-                <span class="font-extrabold ${b.rosterId === 3 ? 'text-[#ffe600]' : 'text-[#cbd5e1]'} truncate max-w-[78px]">${isMyMatchup && b.rosterId === 3 ? '★ ' : ''}${abbr(b.teamName)}</span>
+              <div class="flex items-center justify-between text-[10px] font-mono-num mt-0.5 gap-1.5">
+                <span class="font-extrabold ${b.rosterId === 3 ? 'text-[#ffe600]' : 'text-[#cbd5e1]'} truncate max-w-[68px]">${isMyMatchup && b.rosterId === 3 ? '★' : ''}${abbr(b.teamName)}</span>
                 <span class="font-bold text-[#cbd5e1]">${b.currentPts === 0 ? b.improvedTotalProj.toFixed(1) : b.currentPts.toFixed(1)}</span>
-              </div>
-              <div class="mt-1 pt-0.5 border-t border-white/10 flex items-center justify-between text-[9px] font-mono-num text-[#86efac]">
-                <span>H2H ${formatPct(a.simulation.h2hWinProbImproved)}</span>
-                <span>${isSelected ? '● LIVE' : 'Tap →'}</span>
               </div>
             </button>
           `;
@@ -1090,21 +1107,28 @@
       const isLive = p.gameStatus === 'in_game';
       const isPre = p.gameStatus === 'pre_game';
       const isBye = p.gameStatus === 'bye';
+      const isComplete = p.gameStatus === 'complete';
+      const isLocked = isLive || isComplete;
       const projDiff = p.improvedProj - p.sleeperProj;
       const isMyTeam = rosterObj && rosterObj.rosterId === 3;
 
       let gameTag = '';
+      let mobileSubTag = '';
       if (isBye) {
         gameTag = `<span class="text-[10px] sm:text-[11px] font-bold text-rose-400">BYE</span>`;
+        mobileSubTag = `<span class="text-[10px] font-bold text-rose-400">${p.team} • BYE</span>`;
       } else if (isLive) {
         gameTag = `<span class="text-[10px] sm:text-[11px] font-bold text-[#4ee468]">Q${p.quarter} ${p.clock} • ${p.gameScore}</span>`;
+        mobileSubTag = `<span class="text-[10px] font-bold text-[#4ee468] truncate">🟢 Q${p.quarter} ${p.clock} • ${p.gameScore}</span>`;
       } else if (isPre) {
         const oppLabel = p.opponent ? `${p.opponent}, ` : '';
         const shortClock = (p.clock || 'Sun 1:00').replace(' ET', '');
         gameTag = `<span class="text-[10px] sm:text-[11px] text-[#9ca3af] truncate">${oppLabel}${shortClock}</span>`;
+        mobileSubTag = `<span class="text-[10px] text-[#9ca3af] truncate">${p.team} ${p.opponent ? `${p.opponent} ` : ''}${shortClock}</span>`;
       } else {
         const oppLabel = p.opponent ? `${p.opponent} • ` : '';
         gameTag = `<span class="text-[10px] sm:text-[11px] text-[#9ca3af]">${oppLabel}FINAL</span>`;
+        mobileSubTag = `<span class="text-[10px] text-[#9ca3af] truncate">${p.team} ${p.opponent ? `${p.opponent} ` : ''}• FINAL</span>`;
       }
 
       const badges = [];
@@ -1117,12 +1141,13 @@
         badges.push(`<span class="px-1 py-0.2 rounded text-[9px] font-bold bg-[#184711] text-[#86efac]">🏈</span>`);
       }
 
-      // If bench player, build quick "What-If Swap into Slot" dropdown
+      // If UNLOCKED bench player, build quick "What-If Swap into Unlocked Slot" dropdown
       let swapControl = '';
-      if (isBench && rosterObj) {
+      if (isBench && rosterObj && !isLocked && isPre) {
         const eligibleSlots = [];
         rosterObj.starters.forEach((st, sIdx) => {
-          if (window.SleeperTrackerEngine.isEligibleForSlot(p, st.slot)) {
+          const stLocked = st.gameStatus === 'in_game' || st.gameStatus === 'complete';
+          if (!stLocked && window.SleeperTrackerEngine.isEligibleForSlot(p, st.slot)) {
             eligibleSlots.push(`<option value="${sIdx}">Swap w/ ${st.slot}: ${st.shortName} (${st.improvedProj.toFixed(1)})</option>`);
           }
         });
@@ -1137,47 +1162,75 @@
         }
       }
 
-      // Classic ESPN FantasyCast Player Row: [Headshot Left (sm+)] | [Name, Team + Game Time] | [Right Score Cell]
+      const liveScoreStr = p.currentPts === 0 && isPre ? '0.0' : p.currentPts.toFixed(1);
+
       return `
-        <div class="fc-player-row flex items-stretch min-h-[42px] sm:min-h-[46px] ${
+        <div class="fc-player-row min-h-[42px] sm:min-h-[46px] flex items-stretch ${
           isLive ? 'border-l-2 !border-l-[#4ee468]' : (isMyTeam ? 'border-l-2 !border-l-[#e8c500]/75' : '')
         }">
-          <!-- Mugshot (Hidden on narrow mobile so player names have full readability!) -->
-          <div class="hidden sm:flex w-11 bg-[#111315] border-r border-[#2d3137] shrink-0 items-end justify-center overflow-hidden relative">
-            <img src="https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg"
-                 onerror="this.src='https://sleepercdn.com/images/v2/icons/player_default.webp'"
-                 class="w-10 h-10 object-cover ${isBye ? 'opacity-50 grayscale' : ''}" />
-            ${isLive ? `<span class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[#4ee468] live-dot"></span>` : ''}
-          </div>
-
-          <!-- Player Name, Team & Game Info -->
-          <div class="flex-1 min-w-0 px-1.5 sm:px-2 py-1 flex flex-col justify-center">
-            <div class="flex items-center gap-0.5 sm:gap-1 leading-tight min-w-0">
-              <span class="sm:hidden font-bold text-[11px] text-[#eef2f6] truncate">${p.shortName || p.fullName}</span>
-              <span class="hidden sm:inline font-bold text-xs text-[#eef2f6] truncate">${p.fullName}</span>
-              <span class="text-[10px] sm:text-[11px] text-[#9ca3af] shrink-0">, ${p.team}</span>
-              ${p.injuryStatus ? `<span class="text-[9px] sm:text-[10px] font-extrabold text-[#ff4d4d] shrink-0">${p.injuryStatus}</span>` : ''}
-              ${badges.join('')}
+          <!-- MOBILE SLEEPER / ESPN 2-LINE FULL-WIDTH PLAYER CELL (< 640px) -->
+          <div class="sm:hidden w-full px-1.5 py-1 flex flex-col justify-center min-w-0">
+            <!-- Line 1: Player Short Name + Injury/RZ on Left | Live Score Flush Right -->
+            <div class="flex items-baseline justify-between gap-1 leading-tight">
+              <div class="flex items-center gap-1 min-w-0 truncate">
+                <span class="font-bold text-[12px] text-[#f1f5f9] truncate">${p.shortName || p.fullName}</span>
+                ${p.injuryStatus ? `<span class="text-[9px] font-extrabold text-[#ff4d4d] shrink-0">${p.injuryStatus}</span>` : ''}
+                ${badges.join('')}
+              </div>
+              <span class="font-mono-num font-extrabold text-[13px] shrink-0 ${
+                isBye ? 'text-rose-400' : (isLive ? 'text-[#4ee468]' : (isPre && p.currentPts === 0 ? 'text-[#9ca3af]' : 'text-white'))
+              }">${liveScoreStr}</span>
             </div>
-            <div class="leading-tight mt-0.5 flex items-center gap-1 truncate">
-              ${gameTag}
+            <!-- Line 2: Team & Game Status on Left | Live Projection Flush Right -->
+            <div class="flex items-baseline justify-between gap-1 leading-tight mt-0.5">
+              <div class="min-w-0 truncate">
+                ${mobileSubTag}
+              </div>
+              <span class="font-mono-num text-[10px] shrink-0 ${isLive || isPre ? 'text-[#86efac] font-semibold' : 'text-[#7f8790]'}">
+                ${p.improvedProj.toFixed(1)}
+              </span>
             </div>
             ${swapControl}
           </div>
 
-          <!-- Right Score Box (Matches ESPN FantasyCast separated right-hand point cell) -->
-          <div class="w-11 sm:w-16 bg-black/30 border-l border-[#2d3137] shrink-0 px-1 sm:px-1.5 py-1 flex flex-col items-end justify-center font-mono-num">
-            <div class="text-xs sm:text-base font-bold leading-none ${isBye ? 'text-rose-400' : 'text-white'}">
-              ${p.currentPts === 0 && isPre ? '0' : p.currentPts.toFixed(1)}
+          <!-- DESKTOP CLASSIC ESPN FANTASYCAST 3-PART ROW (>= 640px) -->
+          <div class="hidden sm:flex w-full items-stretch">
+            <!-- Mugshot -->
+            <div class="w-11 bg-[#111315] border-r border-[#2d3137] shrink-0 flex items-end justify-center overflow-hidden relative">
+              <img src="https://sleepercdn.com/content/nfl/players/thumb/${p.playerId}.jpg"
+                   onerror="this.src='https://sleepercdn.com/images/v2/icons/player_default.webp'"
+                   class="w-10 h-10 object-cover ${isBye ? 'opacity-50 grayscale' : ''}" />
+              ${isLive ? `<span class="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-[#4ee468] live-dot"></span>` : ''}
             </div>
-            <div class="text-[9px] sm:text-[10px] leading-tight mt-0.5 ${isLive || isPre ? 'text-[#86efac] font-semibold' : 'text-[#7f8790]'}">
-              ${p.improvedProj.toFixed(1)}
-            </div>
-            ${showSleeperComparison && Math.abs(projDiff) >= 0.2 ? `
-              <div class="hidden sm:block text-[9px] leading-none ${projDiff > 0 ? 'text-[#ffe600]' : 'text-rose-400'}">
-                ${formatSigned(projDiff, 1)}
+
+            <!-- Player Name, Team & Game Info -->
+            <div class="flex-1 min-w-0 px-2 py-1 flex flex-col justify-center">
+              <div class="flex items-center gap-1 leading-tight min-w-0">
+                <span class="font-bold text-xs text-[#eef2f6] truncate">${p.fullName}</span>
+                <span class="text-[11px] text-[#9ca3af] shrink-0">, ${p.team}</span>
+                ${p.injuryStatus ? `<span class="text-[10px] font-extrabold text-[#ff4d4d] shrink-0">${p.injuryStatus}</span>` : ''}
+                ${badges.join('')}
               </div>
-            ` : ''}
+              <div class="leading-tight mt-0.5 flex items-center gap-1 truncate">
+                ${gameTag}
+              </div>
+              ${swapControl}
+            </div>
+
+            <!-- Right Score Box -->
+            <div class="w-16 bg-black/30 border-l border-[#2d3137] shrink-0 px-1.5 py-1 flex flex-col items-end justify-center font-mono-num">
+              <div class="text-base font-bold leading-none ${isBye ? 'text-rose-400' : 'text-white'}">
+                ${p.currentPts === 0 && isPre ? '0' : p.currentPts.toFixed(1)}
+              </div>
+              <div class="text-[10px] leading-tight mt-0.5 ${isLive || isPre ? 'text-[#86efac] font-semibold' : 'text-[#7f8790]'}">
+                ${p.improvedProj.toFixed(1)}
+              </div>
+              ${showSleeperComparison && Math.abs(projDiff) >= 0.2 ? `
+                <div class="text-[9px] leading-none ${projDiff > 0 ? 'text-[#ffe600]' : 'text-rose-400'}">
+                  ${formatSigned(projDiff, 1)}
+                </div>
+              ` : ''}
+            </div>
           </div>
         </div>
       `;
@@ -1191,15 +1244,16 @@
       const a = m.teamA;
       const b = m.teamB;
       const slots = data.league.starterSlots || [];
+      const aWinPctNum = Math.max(2, Math.min(98, Math.round((a.simulation.h2hWinProbImproved || 0.5) * 100)));
 
       const rowsHtml = slots.map((slot, idx) => {
         const pA = a.starters[idx];
         const pB = b.starters[idx];
         const slotLabel = slot === 'SUPER_FLEX' ? 'SFLX' : (slot === 'IDP_FLEX' ? 'IDP' : (slot === 'FLEX' ? 'FLX' : slot));
         return `
-          <div class="grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] sm:grid-cols-12 gap-0.5 sm:gap-1 items-stretch">
+          <div class="grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] sm:grid-cols-12 gap-0.5 sm:gap-1 items-stretch">
             <div class="sm:col-span-5 min-w-0">${pA ? renderPlayerCell(pA, 'left', a, false) : ''}</div>
-            <div class="sm:col-span-2 fc-pos-box flex items-center justify-center font-extrabold text-[10px] sm:text-xs tracking-tight sm:tracking-wider">
+            <div class="sm:col-span-2 fc-pos-box flex items-center justify-center font-extrabold text-[9.5px] sm:text-xs tracking-tight sm:tracking-wider">
               ${slotLabel}
             </div>
             <div class="sm:col-span-5 min-w-0">${pB ? renderPlayerCell(pB, 'right', b, false) : ''}</div>
@@ -1215,9 +1269,9 @@
           const pA = a.bench[i];
           const pB = b.bench[i];
           benchRows.push(`
-            <div class="grid grid-cols-[minmax(0,1fr)_32px_minmax(0,1fr)] sm:grid-cols-12 gap-0.5 sm:gap-1 items-stretch opacity-95">
+            <div class="grid grid-cols-[minmax(0,1fr)_28px_minmax(0,1fr)] sm:grid-cols-12 gap-0.5 sm:gap-1 items-stretch opacity-95">
               <div class="sm:col-span-5 min-w-0">${pA ? renderPlayerCell(pA, 'left', a, true) : ''}</div>
-              <div class="sm:col-span-2 fc-pos-box flex items-center justify-center font-extrabold text-[10px] sm:text-xs text-[#9ca3af]">
+              <div class="sm:col-span-2 fc-pos-box flex items-center justify-center font-extrabold text-[9.5px] sm:text-xs text-[#9ca3af]">
                 BE
               </div>
               <div class="sm:col-span-5 min-w-0">${pB ? renderPlayerCell(pB, 'right', b, true) : ''}</div>
@@ -1227,7 +1281,7 @@
         benchHtml = `
           <div class="mt-2.5 pt-2 border-t-2 border-[#2a5c20] space-y-0.5">
             <div class="text-[10px] sm:text-[11px] font-bold text-[#bbf7d0] px-1 mb-1 flex items-center justify-between">
-              <span>BENCH (BE) — Use "⇄ Swap" to test bench starters</span>
+              <span>BENCH (BE) — Unlocked pre-game players show "⇄ Swap"</span>
               <button onclick="fetchLiveState(true)" class="text-[#ffe600] hover:underline font-extrabold">Reset Lineups</button>
             </div>
             ${benchRows.join('')}
@@ -1236,83 +1290,148 @@
       }
 
       container.innerHTML = `
-        <!-- CLASSIC ESPN FANTASYCAST TURF MATCHUP HEADER -->
-        <div class="p-2 sm:p-3 pb-2 border-b border-[#2e6e23]">
-          <div class="grid grid-cols-[minmax(0,1fr)_36px_minmax(0,1fr)] sm:grid-cols-12 gap-1 items-end">
+        <!-- SLEEPER / ESPN MOBILE MATCHUP SCOREBOARD HEADER (< 640px) -->
+        <div class="sm:hidden p-2 border-b border-[#2e6e23] bg-gradient-to-b from-black/45 to-black/20">
+          <!-- Row 1: Team Avatars & Names -->
+          <div class="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1.5">
+            <div class="flex items-center gap-1.5 min-w-0">
+              <img src="${a.avatarUrl || 'https://sleepercdn.com/images/v2/icons/player_default.webp'}"
+                   onerror="this.src='https://sleepercdn.com/images/v2/icons/player_default.webp'"
+                   class="w-7 h-7 rounded-full object-cover border-2 ${a.rosterId === 3 ? 'border-[#e8c500]' : 'border-[#4ee468]'} shrink-0" />
+              <div class="min-w-0">
+                <div class="font-extrabold text-[12px] text-white truncate leading-tight">${a.teamName}</div>
+                <div class="text-[10px] text-[#bbf7d0] font-mono-num leading-tight">(${a.wins}-${a.losses}) • To Play: ${a.playersYetToPlay}</div>
+              </div>
+            </div>
+
+            <div class="fc-pos-box px-1.5 py-0.5 rounded-xs text-center shrink-0">
+              <div class="text-[8px] font-bold text-[#9ca3af] uppercase leading-none">Med</div>
+              <div class="text-[10px] font-black text-[#ffe600] font-mono-num leading-tight">${data.leagueMedian.expectedMedianImproved.toFixed(1)}</div>
+            </div>
+
+            <div class="flex items-center justify-end gap-1.5 min-w-0 text-right">
+              <div class="min-w-0">
+                <div class="font-extrabold text-[12px] text-white truncate leading-tight">${b.teamName}</div>
+                <div class="text-[10px] text-[#bbf7d0] font-mono-num leading-tight">(${b.wins}-${b.losses}) • To Play: ${b.playersYetToPlay}</div>
+              </div>
+              <img src="${b.avatarUrl || 'https://sleepercdn.com/images/v2/icons/player_default.webp'}"
+                   onerror="this.src='https://sleepercdn.com/images/v2/icons/player_default.webp'"
+                   class="w-7 h-7 rounded-full object-cover border-2 ${b.rosterId === 3 ? 'border-[#e8c500]' : 'border-[#737b84]'} shrink-0" />
+            </div>
+          </div>
+
+          <!-- Row 2: Big Live Scores & Projections (Sleeper / ESPN Mobile Style) -->
+          <div class="grid grid-cols-2 gap-2 mt-1.5">
+            <div class="fc-metal-card rounded-xs px-2 py-1 flex items-baseline justify-between">
+              <div>
+                <div class="text-[10px] font-mono-num text-[#ffe600] font-bold">Proj ${a.improvedTotalProj.toFixed(1)}</div>
+                <div class="text-[9.5px] font-mono-num text-[#86efac]">H2H ${formatPct(a.simulation.h2hWinProbImproved)} • Med ${formatPct(a.simulation.medianWinProbImproved)}</div>
+              </div>
+              <div class="text-xl font-black font-mono-num text-white leading-none">${a.currentPts.toFixed(2)}</div>
+            </div>
+
+            <div class="fc-metal-card rounded-xs px-2 py-1 flex items-baseline justify-between">
+              <div class="text-xl font-black font-mono-num text-white leading-none">${b.currentPts.toFixed(2)}</div>
+              <div class="text-right">
+                <div class="text-[10px] font-mono-num text-[#ffe600] font-bold">Proj ${b.improvedTotalProj.toFixed(1)}</div>
+                <div class="text-[9.5px] font-mono-num text-[#cbd5e1]">H2H ${formatPct(b.simulation.h2hWinProbImproved)} • Med ${formatPct(b.simulation.medianWinProbImproved)}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Row 3: Visual Win Probability Tug-of-War Bar + Bench Toggle -->
+          <div class="mt-1.5">
+            <div class="h-1.5 w-full rounded-full overflow-hidden flex bg-[#2a2e35]">
+              <div style="width:${aWinPctNum}%" class="bg-[#32bd4f] h-full"></div>
+              <div style="width:${100 - aWinPctNum}%" class="bg-[#64748b] h-full"></div>
+            </div>
+            <div class="flex items-center justify-between text-[10px] font-mono-num mt-1">
+              <span class="text-[#86efac] font-bold">2-0: ${formatPct(a.simulation.prob2_0)}</span>
+              <button onclick="showBench = !showBench; renderSelectedMatchupDetail(currentState);" class="text-[#ffe600] font-sans font-bold text-[10px]">
+                ${showBench ? 'Hide Bench ▲' : 'Show Bench ▼'}
+              </button>
+              <span class="text-[#cbd5e1] font-bold">2-0: ${formatPct(b.simulation.prob2_0)}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DESKTOP CLASSIC ESPN FANTASYCAST TURF MATCHUP HEADER (>= 640px) -->
+        <div class="hidden sm:block p-3 pb-2 border-b border-[#2e6e23]">
+          <div class="grid grid-cols-12 gap-1 items-end">
             <!-- Team A Header Stack -->
-            <div class="sm:col-span-5 min-w-0">
-              <div class="flex items-center justify-between px-0.5 sm:px-1 mb-1 gap-1">
+            <div class="col-span-5 min-w-0">
+              <div class="flex items-center justify-between px-1 mb-1 gap-1">
                 <div class="truncate">
-                  <span class="text-[10px] sm:text-xs text-[#bbf7d0] font-semibold">(${a.wins}-${a.losses})</span>
-                  <span class="text-xs sm:text-sm font-extrabold text-white ml-0.5">${a.teamName}</span>
+                  <span class="text-xs text-[#bbf7d0] font-semibold">(${a.wins}-${a.losses})</span>
+                  <span class="text-sm font-extrabold text-white ml-0.5">${a.teamName}</span>
                 </div>
-                <button onclick="openOptimizerForRoster(${a.rosterId})" class="px-1.5 py-0.5 rounded-xs bg-[#e8c500] text-black text-[9px] sm:text-[10px] font-black uppercase hover:bg-[#ffe600] shrink-0">
+                <button onclick="openOptimizerForRoster(${a.rosterId})" class="px-1.5 py-0.5 rounded-xs bg-[#e8c500] text-black text-[10px] font-black uppercase hover:bg-[#ffe600] shrink-0">
                   Opt
                 </button>
               </div>
               <!-- ESPN "To Play / In Play / Proj" Olive Bar -->
-              <div class="bg-black/40 border border-[#326b26] px-1.5 sm:px-2 py-1 text-[10px] sm:text-[11px] font-bold text-[#e2f5e4] flex items-center justify-between flex-wrap gap-1">
+              <div class="bg-black/40 border border-[#326b26] px-2 py-1 text-[11px] font-bold text-[#e2f5e4] flex items-center justify-between flex-wrap gap-1">
                 <span>To Play: ${a.playersYetToPlay}</span>
-                <span class="hidden sm:inline">In Play: ${a.playersInProgress}</span>
+                <span>In Play: ${a.playersInProgress}</span>
                 <span class="text-[#ffe600]">Proj: ${a.improvedTotalProj.toFixed(1)}</span>
               </div>
               <!-- ESPN "Total Score: X" Bar -->
-              <div class="fc-metal-card px-1.5 sm:px-2.5 py-1 sm:py-1.5 mt-0.5 flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5">
-                <span class="text-[10px] sm:text-[11px] font-bold text-[#86efac]">
+              <div class="fc-metal-card px-2.5 py-1.5 mt-0.5 flex items-baseline justify-between gap-0.5">
+                <span class="text-[11px] font-bold text-[#86efac]">
                   H2H: ${formatPct(a.simulation.h2hWinProbImproved)} • Med: ${formatPct(a.simulation.medianWinProbImproved)}
                 </span>
-                <div class="flex items-baseline justify-between sm:justify-end">
-                  <span class="text-[10px] sm:text-xs font-bold text-[#cbd5e1] mr-1">Total:</span>
-                  <span class="text-base sm:text-2xl font-black font-mono-num text-white">${a.currentPts === 0 ? '0' : a.currentPts.toFixed(2)}</span>
+                <div class="flex items-baseline justify-end">
+                  <span class="text-xs font-bold text-[#cbd5e1] mr-1">Total:</span>
+                  <span class="text-2xl font-black font-mono-num text-white">${a.currentPts === 0 ? '0' : a.currentPts.toFixed(2)}</span>
                 </div>
               </div>
             </div>
 
             <!-- Center Column Spacer / Median Cutoff Pill -->
-            <div class="sm:col-span-2 flex flex-col items-center justify-end pb-0.5">
-              <div class="fc-pos-box w-full py-1 sm:py-1.5 text-center rounded-xs">
-                <div class="text-[8px] sm:text-[9px] font-bold text-[#9ca3af] uppercase">Med</div>
-                <div class="text-[10px] sm:text-xs font-black text-[#ffe600] font-mono-num">${data.leagueMedian.expectedMedianImproved.toFixed(1)}</div>
+            <div class="col-span-2 flex flex-col items-center justify-end pb-0.5">
+              <div class="fc-pos-box w-full py-1.5 text-center rounded-xs">
+                <div class="text-[9px] font-bold text-[#9ca3af] uppercase">Med</div>
+                <div class="text-xs font-black text-[#ffe600] font-mono-num">${data.leagueMedian.expectedMedianImproved.toFixed(1)}</div>
               </div>
             </div>
 
             <!-- Team B Header Stack -->
-            <div class="sm:col-span-5 min-w-0">
-              <div class="flex items-center justify-between px-0.5 sm:px-1 mb-1 gap-1">
+            <div class="col-span-5 min-w-0">
+              <div class="flex items-center justify-between px-1 mb-1 gap-1">
                 <div class="truncate">
-                  <span class="text-[10px] sm:text-xs text-[#bbf7d0] font-semibold">(${b.wins}-${b.losses})</span>
-                  <span class="text-xs sm:text-sm font-extrabold text-white ml-0.5">${b.teamName}</span>
+                  <span class="text-xs text-[#bbf7d0] font-semibold">(${b.wins}-${b.losses})</span>
+                  <span class="text-sm font-extrabold text-white ml-0.5">${b.teamName}</span>
                 </div>
-                <button onclick="openOptimizerForRoster(${b.rosterId})" class="px-1.5 py-0.5 rounded-xs bg-[#32363c] text-[#e2e8f0] border border-[#52575f] text-[9px] sm:text-[10px] font-bold uppercase hover:text-white shrink-0">
+                <button onclick="openOptimizerForRoster(${b.rosterId})" class="px-1.5 py-0.5 rounded-xs bg-[#32363c] text-[#e2e8f0] border border-[#52575f] text-[10px] font-bold uppercase hover:text-white shrink-0">
                   Opt
                 </button>
               </div>
               <!-- ESPN "To Play / In Play / Proj" Olive Bar -->
-              <div class="bg-black/40 border border-[#326b26] px-1.5 sm:px-2 py-1 text-[10px] sm:text-[11px] font-bold text-[#e2f5e4] flex items-center justify-between flex-wrap gap-1">
+              <div class="bg-black/40 border border-[#326b26] px-2 py-1 text-[11px] font-bold text-[#e2f5e4] flex items-center justify-between flex-wrap gap-1">
                 <span>To Play: ${b.playersYetToPlay}</span>
-                <span class="hidden sm:inline">In Play: ${b.playersInProgress}</span>
+                <span>In Play: ${b.playersInProgress}</span>
                 <span class="text-[#ffe600]">Proj: ${b.improvedTotalProj.toFixed(1)}</span>
               </div>
               <!-- ESPN "Total Score: X" Bar -->
-              <div class="fc-metal-card px-1.5 sm:px-2.5 py-1 sm:py-1.5 mt-0.5 flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5">
-                <span class="text-[10px] sm:text-[11px] font-bold text-[#cbd5e1]">
+              <div class="fc-metal-card px-2.5 py-1.5 mt-0.5 flex items-baseline justify-between gap-0.5">
+                <span class="text-[11px] font-bold text-[#cbd5e1]">
                   H2H: ${formatPct(b.simulation.h2hWinProbImproved)} • Med: ${formatPct(b.simulation.medianWinProbImproved)}
                 </span>
-                <div class="flex items-baseline justify-between sm:justify-end">
-                  <span class="text-[10px] sm:text-xs font-bold text-[#cbd5e1] mr-1">Total:</span>
-                  <span class="text-base sm:text-2xl font-black font-mono-num text-white">${b.currentPts === 0 ? '0' : b.currentPts.toFixed(2)}</span>
+                <div class="flex items-baseline justify-end">
+                  <span class="text-xs font-bold text-[#cbd5e1] mr-1">Total:</span>
+                  <span class="text-2xl font-black font-mono-num text-white">${b.currentPts === 0 ? '0' : b.currentPts.toFixed(2)}</span>
                 </div>
               </div>
             </div>
           </div>
 
           <!-- Dual-Win Outcome Strip -->
-          <div class="mt-1.5 px-2 py-1 bg-black/35 border border-[#2a5c20] flex flex-wrap items-center justify-between gap-1.5 text-[10px] sm:text-[11px] font-mono-num">
+          <div class="mt-1.5 px-2 py-1 bg-black/35 border border-[#2a5c20] flex flex-wrap items-center justify-between gap-1.5 text-[11px] font-mono-num">
             <div class="flex items-center gap-1.5">
               <span class="text-[#bbf7d0] font-bold">2-0: <b class="text-[#4ee468]">${formatPct(a.simulation.prob2_0)}</b></span>
               <span class="text-[#cbd5e1]">1-1: <b>${formatPct(a.simulation.prob1_1)}</b></span>
             </div>
-            <button onclick="showBench = !showBench; renderSelectedMatchupDetail(currentState);" class="text-[#ffe600] hover:underline font-sans font-bold text-[10px] sm:text-[11px]">
+            <button onclick="showBench = !showBench; renderSelectedMatchupDetail(currentState);" class="text-[#ffe600] hover:underline font-sans font-bold text-[11px]">
               ${showBench ? 'Hide Bench ▲' : 'Show Bench ▼'}
             </button>
             <div class="flex items-center gap-1.5">
@@ -1323,7 +1442,7 @@
         </div>
 
         <!-- STARTERS & BENCH BOARD ON TURF -->
-        <div class="p-1.5 sm:p-3 pt-2 space-y-0.5">
+        <div class="p-1 sm:p-3 pt-1.5 space-y-0.5">
           ${rowsHtml}
           ${benchHtml}
         </div>

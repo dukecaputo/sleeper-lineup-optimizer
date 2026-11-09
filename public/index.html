@@ -1058,7 +1058,7 @@
     </button>
   </nav>
 
-  <script src="./engine.js?v=20261102_ros_v1"></script>
+  <script src="./engine.js?v=20261108_lock_v1"></script>
   <script>
     (function () {
       const LEAGUE_ID = SleeperEngine.DEFAULT_LEAGUE_ID;
@@ -1503,11 +1503,21 @@
         const dPtsVsOpt = act.expectedPts - opt.expectedPts;
 
         const trueSwaps = activeEval.swapsVsCurrent.filter((s) => s.isTrueAddition || s.isTrueRemoval);
+        const isHistoricalPregame = Boolean(liveState.isHistoricalPregame);
+        const lockedStarterCount = isHistoricalPregame ? 0 : (optimizerResult.lockedStarterCount || 0);
+        const rawStartersForLock = liveState.rostersData.find((r) => r.rosterId === selectedRosterId)?.rawStarters || [];
 
-        // Build Quick Bench Contenders Bar (top active bench players not in activeCustomLineup)
+        // Build Quick Bench Contenders Bar (top active UNLOCKED bench players not in activeCustomLineup)
         const activeIds = new Set(activeEval.lineup.map((p) => p.playerId).filter((id) => id && id !== '0'));
         const benchContenders = (optimizerResult.allRosterPlayers || [])
-          .filter((p) => p && p.playerId !== '0' && !activeIds.has(p.playerId) && (p.improvedProj || 0) > 0.5)
+          .filter(
+            (p) =>
+              p &&
+              p.playerId !== '0' &&
+              !activeIds.has(p.playerId) &&
+              (p.improvedProj || 0) > 0.5 &&
+              (isHistoricalPregame || (!p.isLocked && p.gameStatus === 'pre_game'))
+          )
           .slice(0, 8);
 
         // Count how many starters each NFL team currently has in activeEval.lineup
@@ -1538,6 +1548,11 @@
               <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                 <span>🎛️ Dynamic Lineup Explorer & Same-Team Volatility Simulator</span>
                 <span class="badge badge-cyan">100% Vegas Default • 10,000 Correlated MC Trials</span>
+                ${
+                  !isHistoricalPregame
+                    ? `<span class="badge ${lockedStarterCount > 0 ? 'badge-amber' : 'badge-green'}">🔒 ${lockedStarterCount}/14 Starters Locked • ${14 - lockedStarterCount} Actionable</span>`
+                    : `<span class="badge badge-purple">Pregame Historical Mode (All 14 Slots Unlocked)</span>`
+                }
                 ${
                   !activeEval.slotValidity.isValid
                     ? `<span class="badge badge-red">⚠️ ${activeEval.slotValidity.note}</span>`
@@ -1984,81 +1999,94 @@
               </span>
             </div>
 
-            <!-- Quick Bench Contenders Bar (Direct + Double-Swap Aware) -->
+            <!-- Quick Bench Contenders Bar (Direct + Double-Swap Aware, Respects Game Locks) -->
             <div style="background:rgba(15,23,42,0.75); border:1px solid var(--border-subtle); border-radius:10px; padding:10px 12px; margin-bottom:14px;">
-              <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px;">
-                ⚡ Quick Bench Swap & Double-Swap Bar — Tap Any Bench Contender to Sub into Best Direct or Multi-Slot Slide:
+              <div style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                <span>⚡ Quick Bench Swap & Double-Swap Bar — Only Unlocked (Pre-Game) Bench Players & Unlocked Starter Slots:</span>
+                ${
+                  !isHistoricalPregame
+                    ? `<span class="mono" style="color:#fbbf24; font-size:10.5px;">🔒 Players whose games have started/finished are locked & cannot be subbed in or out</span>`
+                    : ''
+                }
               </div>
               <div style="display:flex; flex-wrap:wrap; gap:8px;">
-                ${benchContenders
-                  .map((bp) => {
-                    // 1. Best direct single-slot replacement (lowest projected currently starting player in a slot bp can play)
-                    let bestDirectSlotIdx = -1;
-                    let lowestDirectPts = Infinity;
-                    optimizerResult.slots.forEach((slotName, sIdx) => {
-                      if (optimizerResult.isEligibleForSlot(bp, slotName)) {
-                        const currP = activeEval.lineup[sIdx];
-                        const pts = currP ? currP.improvedProj || 0 : 0;
-                        if (pts < lowestDirectPts) {
-                          lowestDirectPts = pts;
-                          bestDirectSlotIdx = sIdx;
-                        }
-                      }
-                    });
-
-                    // 2. Check if there is an even better 2-step Double Swap (sliding a dual-eligible starter from midSlotIdx ➔ outSlotIdx so bp enters midSlotIdx)
-                    let bestDoubleMove = null;
-                    optimizerResult.slots.forEach((midSlotName, midIdx) => {
-                      if (!optimizerResult.isEligibleForSlot(bp, midSlotName)) return;
-                      const midStarter = activeEval.lineup[midIdx];
-                      if (!midStarter || midStarter.playerId === '0') return;
-                      optimizerResult.slots.forEach((outSlotName, outIdx) => {
-                        if (outIdx === midIdx) return;
-                        if (!optimizerResult.isEligibleForSlot(midStarter, outSlotName)) return;
-                        const outStarter = activeEval.lineup[outIdx];
-                        const outPts = outStarter ? outStarter.improvedProj || 0 : 0;
-                        if (outPts + 0.05 < lowestDirectPts) {
-                          if (!bestDoubleMove || outPts < bestDoubleMove.outPts) {
-                            bestDoubleMove = {
-                              midIdx,
-                              midSlotName,
-                              midStarter,
-                              outIdx,
-                              outSlotName,
-                              outStarter,
-                              outPts
-                            };
+                ${(() => {
+                  const pillList = benchContenders
+                    .map((bp) => {
+                      // 1. Best direct single-slot replacement in an UNLOCKED slot
+                      let bestDirectSlotIdx = -1;
+                      let lowestDirectPts = Infinity;
+                      optimizerResult.slots.forEach((slotName, sIdx) => {
+                        if (!isHistoricalPregame && (optimizerResult.lockedSlots?.[sIdx] || rawStartersForLock[sIdx]?.isLocked)) return;
+                        if (optimizerResult.isEligibleForSlot(bp, slotName)) {
+                          const currP = activeEval.lineup[sIdx];
+                          const pts = currP ? currP.improvedProj || 0 : 0;
+                          if (pts < lowestDirectPts) {
+                            lowestDirectPts = pts;
+                            bestDirectSlotIdx = sIdx;
                           }
                         }
                       });
-                    });
 
-                    if (bestDoubleMove) {
-                      const netDelta = (bp.improvedProj || 0) - bestDoubleMove.outPts;
+                      // 2. Check if there is an even better 2-step Double Swap across UNLOCKED slots
+                      let bestDoubleMove = null;
+                      optimizerResult.slots.forEach((midSlotName, midIdx) => {
+                        if (!isHistoricalPregame && (optimizerResult.lockedSlots?.[midIdx] || rawStartersForLock[midIdx]?.isLocked)) return;
+                        if (!optimizerResult.isEligibleForSlot(bp, midSlotName)) return;
+                        const midStarter = activeEval.lineup[midIdx];
+                        if (!midStarter || midStarter.playerId === '0' || (!isHistoricalPregame && midStarter.isLocked)) return;
+                        optimizerResult.slots.forEach((outSlotName, outIdx) => {
+                          if (outIdx === midIdx) return;
+                          if (!isHistoricalPregame && (optimizerResult.lockedSlots?.[outIdx] || rawStartersForLock[outIdx]?.isLocked)) return;
+                          if (!optimizerResult.isEligibleForSlot(midStarter, outSlotName)) return;
+                          const outStarter = activeEval.lineup[outIdx];
+                          const outPts = outStarter ? outStarter.improvedProj || 0 : 0;
+                          if (outPts + 0.05 < lowestDirectPts) {
+                            if (!bestDoubleMove || outPts < bestDoubleMove.outPts) {
+                              bestDoubleMove = {
+                                midIdx,
+                                midSlotName,
+                                midStarter,
+                                outIdx,
+                                outSlotName,
+                                outStarter,
+                                outPts
+                              };
+                            }
+                          }
+                        });
+                      });
+
+                      if (bestDoubleMove) {
+                        const netDelta = (bp.improvedProj || 0) - bestDoubleMove.outPts;
+                        return `
+                          <button class="btn" data-quick-double-bench="${bp.playerId}" data-quick-mid-slot="${bestDoubleMove.midIdx}" data-quick-out-slot="${bestDoubleMove.outIdx}" style="width:auto; display:inline-flex; align-items:center; gap:7px; padding:6px 10px; font-size:11.5px; border-color:rgba(192,132,252,0.5);">
+                            <span class="pos-pill pos-${bp.canonicalPos}" style="min-width:28px; font-size:10px;">${bp.canonicalPos}</span>
+                            <span><b>${bp.shortName}</b> (${bp.team} • ${fmtNum(bp.improvedProj, 1)})</span>
+                            <span class="badge badge-purple" style="font-size:9.5px; padding:1px 5px;">⇄ Double Swap (${fmtDelta(netDelta, 2)})</span>
+                            <span style="color:var(--text-secondary); font-size:10.5px;">Slide ${bestDoubleMove.midStarter.shortName} ➔ ${bestDoubleMove.outSlotName} (Bench ${bestDoubleMove.outStarter?.shortName || 'Empty'})</span>
+                          </button>
+                        `;
+                      }
+
+                      if (bestDirectSlotIdx < 0) return '';
+                      const replacedP = activeEval.lineup[bestDirectSlotIdx];
+                      const sameTeamCnt = activeTeamCounts.get(bp.team) || 0;
+                      const sameTeamTag = sameTeamCnt > 0 ? `<span class="badge badge-amber" style="font-size:9.5px; padding:1px 5px;">${bp.team} ×${sameTeamCnt + 1}</span>` : '';
                       return `
-                        <button class="btn" data-quick-double-bench="${bp.playerId}" data-quick-mid-slot="${bestDoubleMove.midIdx}" data-quick-out-slot="${bestDoubleMove.outIdx}" style="width:auto; display:inline-flex; align-items:center; gap:7px; padding:6px 10px; font-size:11.5px; border-color:rgba(192,132,252,0.5);">
+                        <button class="btn" data-quick-bench-pid="${bp.playerId}" data-quick-slot="${bestDirectSlotIdx}" style="width:auto; display:inline-flex; align-items:center; gap:7px; padding:6px 10px; font-size:11.5px;">
                           <span class="pos-pill pos-${bp.canonicalPos}" style="min-width:28px; font-size:10px;">${bp.canonicalPos}</span>
                           <span><b>${bp.shortName}</b> (${bp.team} • ${fmtNum(bp.improvedProj, 1)})</span>
-                          <span class="badge badge-purple" style="font-size:9.5px; padding:1px 5px;">⇄ Double Swap (${fmtDelta(netDelta, 2)})</span>
-                          <span style="color:var(--text-secondary); font-size:10.5px;">Slide ${bestDoubleMove.midStarter.shortName} ➔ ${bestDoubleMove.outSlotName} (Bench ${bestDoubleMove.outStarter?.shortName || 'Empty'})</span>
+                          ${sameTeamTag}
+                          <span style="color:var(--text-muted); font-size:10.5px;">➔ ${optimizerResult.slots[bestDirectSlotIdx]} (${replacedP?.shortName || 'Empty'})</span>
                         </button>
                       `;
-                    }
-
-                    if (bestDirectSlotIdx < 0) return '';
-                    const replacedP = activeEval.lineup[bestDirectSlotIdx];
-                    const sameTeamCnt = activeTeamCounts.get(bp.team) || 0;
-                    const sameTeamTag = sameTeamCnt > 0 ? `<span class="badge badge-amber" style="font-size:9.5px; padding:1px 5px;">${bp.team} ×${sameTeamCnt + 1}</span>` : '';
-                    return `
-                      <button class="btn" data-quick-bench-pid="${bp.playerId}" data-quick-slot="${bestDirectSlotIdx}" style="width:auto; display:inline-flex; align-items:center; gap:7px; padding:6px 10px; font-size:11.5px;">
-                        <span class="pos-pill pos-${bp.canonicalPos}" style="min-width:28px; font-size:10px;">${bp.canonicalPos}</span>
-                        <span><b>${bp.shortName}</b> (${bp.team} • ${fmtNum(bp.improvedProj, 1)})</span>
-                        ${sameTeamTag}
-                        <span style="color:var(--text-muted); font-size:10.5px;">➔ ${optimizerResult.slots[bestDirectSlotIdx]} (${replacedP?.shortName || 'Empty'})</span>
-                      </button>
-                    `;
-                  })
-                  .join('')}
+                    })
+                    .filter(Boolean);
+                  return pillList.length > 0
+                    ? pillList.join('')
+                    : `<div style="font-size:12px; color:var(--text-secondary);">🔒 No unlocked pre-game bench players have an eligible unlocked starter slot remaining this week.</div>`;
+                })()}
               </div>
             </div>
 
@@ -2069,6 +2097,12 @@
               const slotItems = activeEval.lineup.map((p, slotIdx) => {
                 const slotName = optimizerResult.slots[slotIdx];
                 const rawStAtSlot = rawStartersList[slotIdx];
+                const isSlotLocked = !isHistoricalPregame && Boolean(optimizerResult.lockedSlots?.[slotIdx] || rawStAtSlot?.isLocked);
+                const lockBadgeHtml = isSlotLocked
+                  ? `<div style="margin-top:3px;"><span class="badge badge-amber" style="font-size:9.5px;" title="Game started or completed — cannot be subbed in or out">🔒 LOCKED (${p.gameStatus === 'in_game' ? 'LIVE' : 'FINAL'} • ${fmtNum(p.currentPts, 1)} pts)</span></div>`
+                  : !isHistoricalPregame
+                  ? `<div style="margin-top:3px;"><span class="badge badge-cyan" style="font-size:9.5px;" title="Pre-game — eligible to swap">🟢 UNLOCKED (${p.clock || 'Pre-Game'})</span></div>`
+                  : '';
                 const isNewVsCurrent = !currentStarterSet.has(p.playerId);
                 const prevRawSlotIdx = rawStartersList.findIndex((rs) => rs && rs.playerId === p.playerId);
                 const isSlidFromAnotherSlot = !isNewVsCurrent && prevRawSlotIdx >= 0 && prevRawSlotIdx !== slotIdx;
@@ -2101,9 +2135,20 @@
                   ? `<b>${p.team}</b> ${p.isHome ? 'vs' : '@'} ${p.opponent} <span class="mono" style="color:var(--accent-cyan);">(${fmtNum(p.teamImpliedPts, 1)} imp | O/U ${fmtNum(p.vegasTotal, 1)})</span>`
                   : `${p.team} (Bye / No Line)`;
 
-                const eligiblePlayers = (optimizerResult.allRosterPlayers || []).filter((cand) =>
-                  optimizerResult.isEligibleForSlot(cand, slotName)
-                );
+                const eligiblePlayers = isSlotLocked
+                  ? [p]
+                  : (optimizerResult.allRosterPlayers || []).filter((cand) => {
+                      if (!optimizerResult.isEligibleForSlot(cand, slotName)) return false;
+                      if (cand.playerId === p.playerId) return true;
+                      if (!isHistoricalPregame && cand.isLocked) return false;
+                      const otherSlotIdx = activeEval.lineup.findIndex(
+                        (st, i) => i !== slotIdx && st && st.playerId === cand.playerId
+                      );
+                      if (otherSlotIdx >= 0 && !isHistoricalPregame && (optimizerResult.lockedSlots?.[otherSlotIdx] || rawStartersList[otherSlotIdx]?.isLocked)) {
+                        return false;
+                      }
+                      return true;
+                    });
 
                 const directOptionsHtml = eligiblePlayers
                   .map((cand) => {
@@ -2112,7 +2157,9 @@
                       (st, i) => i !== slotIdx && st && st.playerId === cand.playerId
                     );
                     const statusPrefix = isCurrentSlotPlayer
-                      ? '✓ '
+                      ? isSlotLocked
+                        ? '🔒 '
+                        : '✓ '
                       : otherSlotIdx >= 0
                       ? `[Slide from ${optimizerResult.slots[otherSlotIdx]}] `
                       : '[BENCH] ';
@@ -2126,22 +2173,26 @@
                   .join('');
 
                 // Also discover any Double-Swap bench players who cannot play `slotName` directly,
-                // but CAN replace `p` at `slotIdx` by sliding a dual-eligible starter from `midIdx` ➔ `slotIdx`!
+                // but CAN replace `p` at `slotIdx` by sliding a dual-eligible UNLOCKED starter from `midIdx` ➔ `slotIdx`!
                 const doubleSwapOptions = [];
-                for (let midIdx = 0; midIdx < optimizerResult.slots.length; midIdx++) {
-                  if (midIdx === slotIdx) continue;
-                  const midStarter = activeEval.lineup[midIdx];
-                  if (!midStarter || midStarter.playerId === '0') continue;
-                  if (!optimizerResult.isEligibleForSlot(midStarter, slotName)) continue;
-                  const midSlotName = optimizerResult.slots[midIdx];
-                  for (const benchCand of (optimizerResult.allRosterPlayers || [])) {
-                    if (activePids.has(String(benchCand.playerId))) continue;
-                    if (optimizerResult.isEligibleForSlot(benchCand, slotName)) continue; // already in direct list
-                    if (!optimizerResult.isEligibleForSlot(benchCand, midSlotName)) continue;
-                    const netEdge = Number(((benchCand.improvedProj || 0) - (p.improvedProj || 0)).toFixed(2));
-                    doubleSwapOptions.push(
-                      `<option value="double:${midIdx}:${benchCand.playerId}">⇄ [DOUBLE SWAP ${fmtDelta(netEdge, 2)}] Start ${benchCand.fullName} (${benchCand.position}, ${fmtNum(benchCand.improvedProj, 2)}) in ${midSlotName} & Slide ${midStarter.shortName} ➔ ${slotName}</option>`
-                    );
+                if (!isSlotLocked) {
+                  for (let midIdx = 0; midIdx < optimizerResult.slots.length; midIdx++) {
+                    if (midIdx === slotIdx) continue;
+                    if (!isHistoricalPregame && (optimizerResult.lockedSlots?.[midIdx] || rawStartersList[midIdx]?.isLocked)) continue;
+                    const midStarter = activeEval.lineup[midIdx];
+                    if (!midStarter || midStarter.playerId === '0' || (!isHistoricalPregame && midStarter.isLocked)) continue;
+                    if (!optimizerResult.isEligibleForSlot(midStarter, slotName)) continue;
+                    const midSlotName = optimizerResult.slots[midIdx];
+                    for (const benchCand of (optimizerResult.allRosterPlayers || [])) {
+                      if (activePids.has(String(benchCand.playerId))) continue;
+                      if (!isHistoricalPregame && (benchCand.isLocked || benchCand.gameStatus !== 'pre_game')) continue;
+                      if (optimizerResult.isEligibleForSlot(benchCand, slotName)) continue; // already in direct list
+                      if (!optimizerResult.isEligibleForSlot(benchCand, midSlotName)) continue;
+                      const netEdge = Number(((benchCand.improvedProj || 0) - (p.improvedProj || 0)).toFixed(2));
+                      doubleSwapOptions.push(
+                        `<option value="double:${midIdx}:${benchCand.playerId}">⇄ [DOUBLE SWAP ${fmtDelta(netEdge, 2)}] Start ${benchCand.fullName} (${benchCand.position}, ${fmtNum(benchCand.improvedProj, 2)}) in ${midSlotName} & Slide ${midStarter.shortName} ➔ ${slotName}</option>`
+                      );
+                    }
                   }
                 }
 
@@ -2156,6 +2207,8 @@
                   slotIdx,
                   slotName,
                   rawStAtSlot,
+                  isSlotLocked,
+                  lockBadgeHtml,
                   isNewVsCurrent,
                   isSlidFromAnotherSlot,
                   slidFromSlotName,
@@ -2203,10 +2256,11 @@
                                   ? `<span class="badge badge-purple">⇄ SLID FROM ${it.slidFromSlotName}</span>`
                                   : '<span class="badge" style="background:rgba(148,163,184,0.12); color:var(--text-secondary);">STARTER</span>'
                               }
+                              ${it.lockBadgeHtml}
                               ${!it.isInOptimal ? '<div style="margin-top:3px;"><span class="badge badge-amber" style="font-size:9.5px;">Custom</span></div>' : ''}
                             </td>
                             <td>
-                              <select class="slot-player-select" data-slot-index="${it.slotIdx}" style="width:100%; font-weight:700; background:rgba(15,23,42,0.9); border-color:rgba(56,189,248,0.3);">
+                              <select class="slot-player-select" data-slot-index="${it.slotIdx}" ${it.isSlotLocked ? 'disabled' : ''} style="width:100%; font-weight:700; background:rgba(15,23,42,0.9); border-color:${it.isSlotLocked ? 'rgba(245,158,11,0.4)' : 'rgba(56,189,248,0.3)'}; ${it.isSlotLocked ? 'opacity:0.8; cursor:not-allowed;' : ''}">
                                 ${it.optionsHtml}
                               </select>
                             </td>
@@ -2250,6 +2304,7 @@
                                 ? `<span class="badge badge-purple">⇄ SLID FROM ${it.slidFromSlotName}</span>`
                                 : '<span class="badge" style="background:rgba(148,163,184,0.12); color:var(--text-secondary);">STARTER</span>'
                             }
+                            ${it.isSlotLocked ? `<span class="badge badge-amber" style="font-size:9.5px;">🔒 LOCKED (${fmtNum(it.p.currentPts, 1)})</span>` : (!isHistoricalPregame ? `<span class="badge badge-cyan" style="font-size:9.5px;">🟢 UNLOCKED</span>` : '')}
                             ${it.sameTeamBadge}
                           </div>
                           <div style="text-align:right;">
@@ -2262,7 +2317,7 @@
                           </div>
                         </div>
 
-                        <select class="slot-player-select" data-slot-index="${it.slotIdx}" style="width:100%; font-weight:700; background:rgba(11,15,25,0.95); border-color:rgba(56,189,248,0.4);">
+                        <select class="slot-player-select" data-slot-index="${it.slotIdx}" ${it.isSlotLocked ? 'disabled' : ''} style="width:100%; font-weight:700; background:rgba(11,15,25,0.95); border-color:${it.isSlotLocked ? 'rgba(245,158,11,0.45)' : 'rgba(56,189,248,0.4)'}; ${it.isSlotLocked ? 'opacity:0.8; cursor:not-allowed;' : ''}">
                           ${it.optionsHtml}
                         </select>
 
@@ -2431,6 +2486,10 @@
         container.querySelectorAll('.slot-player-select').forEach((sel) => {
           sel.addEventListener('change', (e) => {
             const slotIdx = Number(e.target.getAttribute('data-slot-index'));
+            if (!liveState.isHistoricalPregame && optimizerResult.lockedSlots?.[slotIdx]) {
+              renderOptimizerTab();
+              return;
+            }
             const rawVal = String(e.target.value);
 
             // Handle explicit 2-step Double Swap option (`double:midIdx:benchPid`)
@@ -2438,9 +2497,13 @@
               const parts = rawVal.split(':');
               const midIdx = Number(parts[1]);
               const benchPid = parts[2];
+              if (!liveState.isHistoricalPregame && optimizerResult.lockedSlots?.[midIdx]) {
+                renderOptimizerTab();
+                return;
+              }
               const midStarter = activeCustomLineup[midIdx];
               const benchPlayer = (optimizerResult.allRosterPlayers || []).find((p) => String(p.playerId) === String(benchPid));
-              if (midStarter && benchPlayer) {
+              if (midStarter && benchPlayer && (liveState.isHistoricalPregame || (!midStarter.isLocked && !benchPlayer.isLocked))) {
                 activeCustomLineup[slotIdx] = { ...midStarter, slot: optimizerResult.slots[slotIdx] };
                 activeCustomLineup[midIdx] = { ...benchPlayer, slot: optimizerResult.slots[midIdx] };
                 activePresetId = 'custom';
@@ -2451,7 +2514,10 @@
 
             const newPid = rawVal;
             const newPlayer = (optimizerResult.allRosterPlayers || []).find((p) => String(p.playerId) === newPid);
-            if (!newPlayer) return;
+            if (!newPlayer || (!liveState.isHistoricalPregame && newPlayer.isLocked && newPlayer.playerId !== activeCustomLineup[slotIdx]?.playerId)) {
+              renderOptimizerTab();
+              return;
+            }
 
             const oldPlayerInSlot = activeCustomLineup[slotIdx];
             const existingOtherSlotIdx = activeCustomLineup.findIndex(
@@ -2460,27 +2526,34 @@
 
             // Case A: newPlayer was already starting in another slot (`existingOtherSlotIdx`)
             if (existingOtherSlotIdx >= 0) {
+              if (!liveState.isHistoricalPregame && optimizerResult.lockedSlots?.[existingOtherSlotIdx]) {
+                renderOptimizerTab();
+                return;
+              }
               const otherSlotName = optimizerResult.slots[existingOtherSlotIdx];
               if (oldPlayerInSlot && optimizerResult.isEligibleForSlot(oldPlayerInSlot, otherSlotName)) {
                 activeCustomLineup[existingOtherSlotIdx] = { ...oldPlayerInSlot, slot: otherSlotName };
               } else {
-                // Find highest projected bench player eligible for otherSlotName
+                // Find highest projected unlocked bench player eligible for otherSlotName
                 const usedIds = new Set(activeCustomLineup.map((p) => String(p?.playerId)));
                 usedIds.add(newPid);
                 const replacement = (optimizerResult.allRosterPlayers || []).find(
-                  (cand) => !usedIds.has(String(cand.playerId)) && optimizerResult.isEligibleForSlot(cand, otherSlotName)
+                  (cand) =>
+                    !usedIds.has(String(cand.playerId)) &&
+                    (liveState.isHistoricalPregame || !cand.isLocked) &&
+                    optimizerResult.isEligibleForSlot(cand, otherSlotName)
                 );
                 if (replacement) {
                   activeCustomLineup[existingOtherSlotIdx] = { ...replacement, slot: otherSlotName };
                 }
               }
             } else if (oldPlayerInSlot && oldPlayerInSlot.playerId !== '0') {
-              // Case B: newPlayer is from the Bench (`Zack Baun` -> `LB`), and `oldPlayerInSlot` (`Greg Rousseau` in `LB`, 6.05)
-              // has dual eligibility to slide into another slot (`DL`) where the current starter (`Chase Young`, 3.77) is lower projected!
+              // Case B: newPlayer is from the Bench, and `oldPlayerInSlot` has dual eligibility to slide into another UNLOCKED slot
               let bestSlideIdx = -1;
               let lowestSlidePts = (oldPlayerInSlot.improvedProj || 0) - 0.1;
               optimizerResult.slots.forEach((sName, sIdx) => {
                 if (sIdx === slotIdx) return;
+                if (!liveState.isHistoricalPregame && optimizerResult.lockedSlots?.[sIdx]) return;
                 if (!optimizerResult.isEligibleForSlot(oldPlayerInSlot, sName)) return;
                 const occ = activeCustomLineup[sIdx];
                 const occPts = occ ? occ.improvedProj || 0 : 0;
@@ -3124,6 +3197,9 @@
                         statusBadge = '<span class="badge badge-amber">↓ BENCH IN OPTIMAL</span>';
                       } else {
                         statusBadge = '<span class="badge" style="background:rgba(148,163,184,0.1);color:var(--text-muted);">BENCH</span>';
+                      }
+                      if (!liveState.isHistoricalPregame && p.isLocked) {
+                        statusBadge += `<div style="margin-top:3px;"><span class="badge badge-amber" style="font-size:9.5px;">🔒 LOCKED (${p.gameStatus === 'in_game' ? 'LIVE' : 'FINAL'} • ${fmtNum(p.currentPts, 1)} pts)</span></div>`;
                       }
                       return `
                         <tr class="${p._isOptStarter && !wasCurrentStarter ? 'row-swap' : ''}" style="${!p._isOptStarter ? 'opacity:0.78;' : ''}">
