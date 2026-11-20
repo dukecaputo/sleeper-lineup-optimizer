@@ -954,11 +954,14 @@
         <div class="ctrl-group">
           <label class="ctrl-label" for="objectiveSelect">Optimization Goal</label>
           <select id="objectiveSelect">
-            <option value="total_wins" selected>Max Expected Total Wins (H2H + Median)</option>
+            <option value="min_variance_floor" selected>🛡️ Floor Survival & Min Variance (Hit Min Win Target, Avoid 0-2)</option>
+            <option value="total_wins">Max Expected Total Wins (H2H + Median, Risk-Adjusted)</option>
+            <option value="cvar_p20">Max 20th-Percentile Downside Floor (p20 / CVaR)</option>
+            <option value="adaptive_posture">🧠 Auto-Adaptive Posture (Protect Floor vs. Chase Deficit)</option>
             <option value="h2h">Max Matchup H2H Win % Only</option>
             <option value="median">Max Top-5 League Median Win % Only</option>
             <option value="sweep_2_0">Max 2-0 Weekly Sweep Probability</option>
-            <option value="points">Max Expected Fantasy Points</option>
+            <option value="points">Max Raw Expected Fantasy Points (Ignore Variance)</option>
           </select>
         </div>
 
@@ -996,8 +999,8 @@
         <span class="tab-pill" id="rosPlayoffPill">...</span>
       </button>
       <button class="tab-btn" data-tab="backtest">
-        📈 Backtest (W1–W7)
-        <span class="tab-pill">+49.7 Pts / +1W</span>
+        <span id="backtestTabTitle">📈 Backtest (W1–W10)</span>
+        <span class="tab-pill" id="backtestTabPill">+139.6 Pts / +2W (84% Hit)</span>
       </button>
       <button class="tab-btn" data-tab="props">
         📊 Player Props
@@ -1058,17 +1061,29 @@
     </button>
   </nav>
 
-  <script src="./engine.js?v=20261108_lock_v1"></script>
+  <script src="./engine.js?v=20261119_floor8_v1"></script>
   <script>
     (function () {
       const LEAGUE_ID = SleeperEngine.DEFAULT_LEAGUE_ID;
       let currentTab = 'optimizer';
       let selectedRosterId = 3; // Default: Hoon Lounge Hooners (@stephencaputo)
       let selectedWeek = null; // Dynamically defaults to currentNflWeek on load
-      let selectedObjective = 'total_wins';
+      let selectedObjective = 'min_variance_floor';
       let selectedMarketWeight = 1.0; // Default: 100% Pure Vegas / Market Props
       let selectedMarketSource = 'consensus';
       let idpPosFilter = 'ALL'; // 'ALL' | 'DL' | 'LB' | 'DB' | 'UPGRADES'
+
+      // All 8 Floor & Variance Minimization Options (Individually toggleable in UI)
+      let optFlagsState = {
+        useTargetFloorSurvival: true,
+        useFloorVariancePenalty: true,
+        useAntiStackDiversification: true,
+        useComponentVariance: true,
+        useRollingEmpiricalFloor: true,
+        useIdpFloorOpt: true,
+        useConvictionFilter: true,
+        useAdaptivePosture: true
+      };
 
       let liveState = null;
       let optimizerResult = null;
@@ -1273,7 +1288,8 @@
         optimizerResult = SleeperEngine.runSimulationLineupOptimizer(liveState, selectedRosterId, {
           numSims: 10000,
           objective: selectedObjective,
-          marketWeight: selectedMarketWeight
+          marketWeight: selectedMarketWeight,
+          ...optFlagsState
         });
 
         if (!activeCustomLineup && optimizerResult.optimalCandidate?.lineup) {
@@ -1540,8 +1556,109 @@
         const oppCorrs = activeEval.oppCorrelations || [];
 
         const distSvg = buildDistributionSvg(act, benchmarkMetrics, benchmarkLabel, optimizerResult.oppTeamName);
+        const activeFlags = optimizerResult.optFlags || optFlagsState;
+        const activeFlagsCount = Object.values(activeFlags).filter(Boolean).length;
+        const postureObj = optimizerResult.adaptivePosture || {
+          mode: 'MIN_OUTCOME_TARGET',
+          label: `🎯 Minimum Outcome & Variance Minimization (Target ≥ ${fmtNum(act.targetWinScore, 1)} Pts & Avoid 0-2)`
+        };
+
+        const floorOptionDefinitions = [
+          {
+            key: 'useTargetFloorSurvival',
+            num: 1,
+            title: 'Min Target Survival',
+            desc: `Max P(Score ≥ ${fmtNum(act.targetWinScore, 1)} pts) & Avoid 0-2`
+          },
+          {
+            key: 'useFloorVariancePenalty',
+            num: 2,
+            title: 'p20 Floor & Variance Penalty',
+            desc: 'Weights p20 / CVaR floor & penalizes excess σ'
+          },
+          {
+            key: 'useAntiStackDiversification',
+            num: 3,
+            title: 'Anti-Stack Diversification',
+            desc: 'Penalizes positive same-team concentration Δσ'
+          },
+          {
+            key: 'useComponentVariance',
+            num: 4,
+            title: 'Volume vs. TD/Sack Variance',
+            desc: 'Favors PPR catches/carries/tackles over TD/sack spikes'
+          },
+          {
+            key: 'useRollingEmpiricalFloor',
+            num: 5,
+            title: '4-Wk Empirical Floor Anchor',
+            desc: 'Calibrates σ & hot-streak floor from prior game logs'
+          },
+          {
+            key: 'useIdpFloorOpt',
+            num: 6,
+            title: 'IDP Tackle-Floor Solver',
+            desc: 'Optimizes 4 IDP slots for tackle floor vs. sack volatility'
+          },
+          {
+            key: 'useConvictionFilter',
+            num: 7,
+            title: 'Min Conviction Swap Filter',
+            desc: 'Filters <0.5 pt micro-noise swaps unless p20 floor improves'
+          },
+          {
+            key: 'useAdaptivePosture',
+            num: 8,
+            title: 'Live Adaptive Posture',
+            desc: 'Auto-switches between Lead Floor-Lock & Deficit Chase'
+          }
+        ];
 
         container.innerHTML = `
+          <!-- 8 Interactive Minimum-Outcome & Variance-Minimization Options Panel -->
+          <div class="card" style="margin-bottom:14px; border-color:rgba(45,212,191,0.42); background:linear-gradient(145deg, rgba(15, 23, 42, 0.94) 0%, rgba(13, 42, 48, 0.38) 100%);">
+            <div class="card-title" style="margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <span>🛡️ Minimum-Outcome & Variance-Minimization Engine (${activeFlagsCount}/8 Options Active)</span>
+                <span class="badge badge-green">Target Cash Line: ≥ ${fmtNum(act.targetWinScore, 1)} Pts (${fmtPct(act.probHitTarget)} Hit • ${fmtPct(act.probAvoid0_2)} Avoid 0-2)</span>
+                <span class="badge badge-cyan">${postureObj.label}</span>
+              </div>
+              <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                <button type="button" class="btn ${activeFlagsCount === 8 ? 'btn-primary' : ''}" id="enableAllFloorOptsBtn" style="width:auto; padding:4px 10px; font-size:11px;">
+                  ✓ Enable All 8 (Recommended)
+                </button>
+                <button type="button" class="btn ${activeFlagsCount === 0 ? 'btn-primary' : ''}" id="disableAllFloorOptsBtn" style="width:auto; padding:4px 10px; font-size:11px;">
+                  Classic Raw-Mean Mode (0/8)
+                </button>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:8px;">
+              ${floorOptionDefinitions
+                .map((optDef) => {
+                  const isOn = Boolean(activeFlags[optDef.key]);
+                  return `
+                    <button type="button" data-toggle-floor-opt="${optDef.key}" style="text-align:left; padding:7px 10px; border-radius:8px; cursor:pointer; font-family:inherit; transition:all 0.15s ease; background:${
+                      isOn ? 'rgba(20, 83, 45, 0.35)' : 'rgba(15, 23, 42, 0.7)'
+                    }; border:1px solid ${isOn ? 'rgba(74, 222, 128, 0.55)' : 'rgba(148, 163, 184, 0.2)'}; color:var(--text-primary);">
+                      <div style="display:flex; align-items:center; justify-content:space-between; gap:6px; margin-bottom:2px;">
+                        <span style="font-size:11.5px; font-weight:800; color:${isOn ? '#4ade80' : 'var(--text-secondary)'};">
+                          #${optDef.num}. ${optDef.title}
+                        </span>
+                        <span class="badge ${isOn ? 'badge-green' : ''}" style="font-size:9.5px; padding:1px 6px; ${
+                          !isOn ? 'background:rgba(148,163,184,0.15); color:var(--text-muted);' : ''
+                        }">${isOn ? 'ON' : 'OFF'}</span>
+                      </div>
+                      <div style="font-size:10.5px; color:var(--text-secondary); line-height:1.25;">
+                        ${optDef.desc}
+                      </div>
+                    </button>
+                  `;
+                })
+                .join('')}
+            </div>
+          </div>
+
           <!-- Interactive Preset & Candidate Switcher Bar -->
           <div class="card" style="margin-bottom:16px; border-color:rgba(56,189,248,0.35);">
             <div class="card-title" style="margin-bottom:8px;">
@@ -1623,12 +1740,12 @@
                 <span class="mono" style="font-weight:700;">${fmtPct(curr.h2hWinProb)} / ${fmtPct(curr.medianWinProb)}</span>
               </div>
               <div class="metric-row">
-                <span>2-0 Sweep Ceiling / 0-2 Risk</span>
-                <span class="mono">${fmtPct(curr.prob2_0)} / ${fmtPct(curr.prob0_2)}</span>
+                <span>Min Target (≥${fmtNum(curr.targetWinScore, 1)}) / Avoid 0-2</span>
+                <span class="mono" style="font-weight:700;">${fmtPct(curr.probHitTarget)} / ${fmtPct(curr.probAvoid0_2)}</span>
               </div>
               <div class="metric-row">
-                <span>80% Sim Range (p10 – p90)</span>
-                <span class="mono">${fmtNum(curr.p10, 1)} – ${fmtNum(curr.p90, 1)}</span>
+                <span>Downside p20 Floor / CVaR (Worst 20%)</span>
+                <span class="mono">${fmtNum(curr.p20, 1)} / ${fmtNum(curr.cvar20, 1)} pts</span>
               </div>
               <div class="metric-row">
                 <span>Lineup Volatility (Indep → Correlated σ)</span>
@@ -1657,12 +1774,12 @@
                 <span class="mono" style="font-weight:700; color:#4ade80;">${fmtPct(opt.h2hWinProb)} / ${fmtPct(opt.medianWinProb)}</span>
               </div>
               <div class="metric-row">
-                <span>2-0 Sweep Ceiling / 0-2 Risk</span>
-                <span class="mono">${fmtPct(opt.prob2_0)} / ${fmtPct(opt.prob0_2)}</span>
+                <span>Min Target (≥${fmtNum(opt.targetWinScore, 1)}) / Avoid 0-2</span>
+                <span class="mono" style="font-weight:700; color:#4ade80;">${fmtPct(opt.probHitTarget)} / ${fmtPct(opt.probAvoid0_2)}</span>
               </div>
               <div class="metric-row">
-                <span>80% Sim Range (p10 – p90)</span>
-                <span class="mono">${fmtNum(opt.p10, 1)} – ${fmtNum(opt.p90, 1)}</span>
+                <span>Downside p20 Floor / CVaR (Worst 20%)</span>
+                <span class="mono" style="color:#5eead4; font-weight:700;">${fmtNum(opt.p20, 1)} / ${fmtNum(opt.cvar20, 1)} pts</span>
               </div>
               <div class="metric-row">
                 <span>Lineup Volatility (Indep → Correlated σ)</span>
@@ -1691,12 +1808,12 @@
                 <span class="mono" style="font-weight:700; color:var(--accent-cyan);">${fmtPct(act.h2hWinProb)} / ${fmtPct(act.medianWinProb)}</span>
               </div>
               <div class="metric-row">
-                <span>2-0 Sweep Ceiling / 0-2 Risk</span>
-                <span class="mono">${fmtPct(act.prob2_0)} / ${fmtPct(act.prob0_2)}</span>
+                <span>Min Target (≥${fmtNum(act.targetWinScore, 1)}) / Avoid 0-2</span>
+                <span class="mono" style="font-weight:700; color:var(--accent-cyan);">${fmtPct(act.probHitTarget)} / ${fmtPct(act.probAvoid0_2)}</span>
               </div>
               <div class="metric-row">
-                <span>80% Sim Range (p10 – p90)</span>
-                <span class="mono">${fmtNum(act.p10, 1)} – ${fmtNum(act.p90, 1)}</span>
+                <span>Downside p20 Floor / CVaR (Worst 20%)</span>
+                <span class="mono" style="color:#5eead4; font-weight:700;">${fmtNum(act.p20, 1)} / ${fmtNum(act.cvar20, 1)} pts</span>
               </div>
               <div class="metric-row">
                 <span>Same-Team Volatility Shift (Δσ)</span>
@@ -1935,6 +2052,16 @@
                   <div style="text-align:right; max-width:460px; display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
                     <div style="display:flex; gap:6px; justify-content:flex-end; align-items:center; flex-wrap:wrap;">
                       <span class="badge badge-cyan mono">${fmtDelta(sw.projDelta, 2, ' Vegas Pts')}</span>
+                      ${
+                        sw.p20FloorDelta !== undefined
+                          ? `<span class="badge ${sw.p20FloorDelta >= 0 ? 'badge-green' : 'badge-amber'} mono">🛡️ p20 Floor: ${fmtDelta(sw.p20FloorDelta, 2)}</span>`
+                          : ''
+                      }
+                      ${
+                        sw.inVolFloorPct
+                          ? `<span class="badge badge-purple mono">${sw.inVolFloorPct}% Vol Floor</span>`
+                          : ''
+                      }
                       ${
                         isApplied
                           ? `<button type="button" class="btn" data-undo-swap-idx="${idx}" style="width:auto; padding:4px 10px; font-size:11px; border-color:rgba(244,63,94,0.45); color:#fda4af;">↩ Undo Move</button>`
@@ -2587,6 +2714,46 @@
           });
         });
 
+        // 8 Interactive Floor & Variance Option Toggle Buttons
+        container.querySelectorAll('[data-toggle-floor-opt]').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            const k = btn.getAttribute('data-toggle-floor-opt');
+            if (k && Object.prototype.hasOwnProperty.call(optFlagsState, k)) {
+              optFlagsState[k] = !optFlagsState[k];
+              activeCustomLineup = null;
+              activePresetId = 'optimal';
+              recomputeOptimizer();
+              if (currentTab === 'backtest') ensureBacktestLoaded(true);
+            }
+          });
+        });
+
+        const enableAllBtn = document.getElementById('enableAllFloorOptsBtn');
+        if (enableAllBtn) {
+          enableAllBtn.addEventListener('click', () => {
+            Object.keys(optFlagsState).forEach((k) => {
+              optFlagsState[k] = true;
+            });
+            activeCustomLineup = null;
+            activePresetId = 'optimal';
+            recomputeOptimizer();
+            if (currentTab === 'backtest') ensureBacktestLoaded(true);
+          });
+        }
+
+        const disableAllBtn = document.getElementById('disableAllFloorOptsBtn');
+        if (disableAllBtn) {
+          disableAllBtn.addEventListener('click', () => {
+            Object.keys(optFlagsState).forEach((k) => {
+              optFlagsState[k] = false;
+            });
+            activeCustomLineup = null;
+            activePresetId = 'optimal';
+            recomputeOptimizer();
+            if (currentTab === 'backtest') ensureBacktestLoaded(true);
+          });
+        }
+
         // Quick Bench Double-Swap (2-Step Slide + Sub)
         container.querySelectorAll('[data-quick-double-bench]').forEach((btn) => {
           btn.addEventListener('click', () => {
@@ -2606,22 +2773,33 @@
       }
 
       // =========================================================================
-      // TAB 3: HISTORICAL BACKTEST (WEEKS 1–7) VS ACTUAL EXPECTATIONS
+      // TAB 3: HISTORICAL BACKTEST (COMPLETED WEEKS) VS ACTUAL EXPECTATIONS
       // =========================================================================
       async function ensureBacktestLoaded(force = false) {
-        const key = `${selectedRosterId}_${selectedObjective}_${selectedMarketWeight}`;
+        const flagsSig = Object.values(optFlagsState).map((v) => (v ? '1' : '0')).join('');
+        const key = `${selectedRosterId}_${selectedObjective}_${selectedMarketWeight}_${flagsSig}`;
         if (!force && backtestResult && backtestCacheKey === key) {
           renderBacktestTab();
           return;
         }
         const container = document.getElementById('tab-backtest');
-        container.innerHTML = `<div class="loading-banner">⏳ Running Historical Pregame Backtest across Completed Weeks 1–7 (28,000+ CRN Simulations, Zero Hindsight Leakage)...</div>`;
+        container.innerHTML = `<div class="loading-banner">⏳ Running Historical Pregame Backtest across all Completed Weeks (40,000+ CRN Simulations, Zero Hindsight Leakage)...</div>`;
         try {
           backtestResult = await SleeperEngine.runHistoricalBacktest(LEAGUE_ID, selectedRosterId, {
             objective: selectedObjective,
-            marketWeight: selectedMarketWeight
+            marketWeight: selectedMarketWeight,
+            ...optFlagsState
           });
           backtestCacheKey = key;
+          if (backtestResult && backtestResult.summary) {
+            const s = backtestResult.summary;
+            const btTitleEl = document.getElementById('backtestTabTitle');
+            const btPillEl = document.getElementById('backtestTabPill');
+            if (btTitleEl) btTitleEl.textContent = `📈 Backtest (W1–W${s.weeksEvaluated})`;
+            if (btPillEl) {
+              btPillEl.textContent = `${fmtDelta(s.toolPtsGainVsActualSet, 1, ' Pts')} / ${fmtDelta(s.toolWinsGainVsActualSet, 0, 'W')} (${Math.round((s.swapHitRate || 0) * 100)}% Hit)`;
+            }
+          }
           renderBacktestTab();
         } catch (err) {
           console.error(err);

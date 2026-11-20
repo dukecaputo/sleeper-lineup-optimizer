@@ -1010,11 +1010,18 @@
         sleeperProj: isBye ? 0 : currentPts,
         improvedProj: isBye ? 0 : currentPts,
         floor: isBye ? 0 : currentPts,
+        p20Floor: isBye ? 0 : currentPts,
         ceiling: isBye ? 0 : currentPts,
+        volumeFloorPts: isBye ? 0 : currentPts,
+        volumeFloorRatio: 0.60,
         remMeanSleeper: 0,
         remMeanImproved: 0,
         remSdSleeper: 0,
+        baseRemSdImproved: 0,
+        componentRemSdImproved: 0,
         remSdImproved: 0,
+        baseSkewness: 0,
+        componentSkewness: 0,
         skewness: 0,
         factors: {
           linearRemFrac: 0,
@@ -1141,29 +1148,64 @@
     const improvedProj = currentPts + remMeanImproved;
 
     const posVolatility = {
-      QB: { cv: 0.40, baseSd: 2.2, skew: 0.55 },
-      RB: { cv: 0.52, baseSd: 2.0, skew: 0.95 },
-      WR: { cv: 0.62, baseSd: 2.1, skew: 1.15 },
-      TE: { cv: 0.66, baseSd: 1.8, skew: 1.25 },
-      DL: { cv: 0.74, baseSd: 1.5, skew: 1.35 },
-      LB: { cv: 0.52, baseSd: 1.4, skew: 0.85 },
-      DB: { cv: 0.66, baseSd: 1.4, skew: 1.15 }
-    }[pos] || { cv: 0.60, baseSd: 1.8, skew: 1.0 };
+      QB: { cv: 0.40, baseSd: 2.2, skew: 0.55, baseVolRatio: 0.62 },
+      RB: { cv: 0.52, baseSd: 2.0, skew: 0.95, baseVolRatio: 0.58 },
+      WR: { cv: 0.62, baseSd: 2.1, skew: 1.15, baseVolRatio: 0.62 },
+      TE: { cv: 0.66, baseSd: 1.8, skew: 1.25, baseVolRatio: 0.60 },
+      DL: { cv: 0.74, baseSd: 1.5, skew: 1.35, baseVolRatio: 0.44 },
+      LB: { cv: 0.52, baseSd: 1.4, skew: 0.85, baseVolRatio: 0.68 },
+      DB: { cv: 0.66, baseSd: 1.4, skew: 1.15, baseVolRatio: 0.62 }
+    }[pos] || { cv: 0.60, baseSd: 1.8, skew: 1.0, baseVolRatio: 0.58 };
 
-    const fullGameSd = marketImpliedPregame > 0.2
+    // Decompose projection into Volume Floor Points (receptions, carries, base yardage, tackles)
+    // vs. Volatile Spike Points (touchdowns, sacks, turnovers, big-play bombs)
+    let volumeFloorPts = 0;
+    if (pos === 'QB') {
+      const pYds = Number(activePropsObj?.passYds ?? projStats.pass_yd ?? 0);
+      const rYds = Number(activePropsObj?.rushYds ?? projStats.rush_yd ?? 0);
+      const pCmp = Number(activePropsObj?.passCmp ?? projStats.pass_cmp ?? (pYds / 11.2));
+      volumeFloorPts = pYds * 0.04 * 0.72 + rYds * 0.10 * 0.75 + pCmp * Number(scoringSettings.pass_cmp || 0);
+    } else if (pos === 'RB' || pos === 'WR' || pos === 'TE') {
+      const recCnt = Number(activePropsObj?.rec ?? projStats.rec ?? 0);
+      const recY = Number(activePropsObj?.recYds ?? projStats.rec_yd ?? 0);
+      const rushY = Number(activePropsObj?.rushYds ?? projStats.rush_yd ?? 0);
+      const rushA = Number(projStats.rush_att ?? (rushY / 4.3));
+      const pprM = Number(scoringSettings.rec ?? 1.0);
+      volumeFloorPts = recCnt * pprM * 0.86 + (recY + rushY) * 0.10 * 0.64 + Math.min(1.6, rushA * 0.08);
+    } else {
+      const tklTot = Number(activePropsObj?.tackles ?? projStats.idp_tkl ?? ((projStats.idp_tkl_solo || 0) + (projStats.idp_tkl_ast || 0)) ?? 0);
+      const soloShare = pos === 'DL' ? 0.58 : (pos === 'LB' ? 0.60 : 0.68);
+      const tklValue = tklTot * (soloShare * Number(scoringSettings.idp_tkl_solo || 1.5) + (1 - soloShare) * Number(scoringSettings.idp_tkl_ast || 0.75));
+      volumeFloorPts = tklValue * 0.84;
+    }
+
+    const volumeFloorRatio = marketImpliedPregame > 0.5
+      ? Number(Math.max(0.18, Math.min(0.92, volumeFloorPts / marketImpliedPregame)).toFixed(3))
+      : posVolatility.baseVolRatio;
+    const volRatioDiff = volumeFloorRatio - posVolatility.baseVolRatio;
+    const componentCvMult = Math.max(0.76, Math.min(1.24, 1.0 - 0.82 * volRatioDiff));
+    const componentSkewMult = Math.max(0.72, Math.min(1.28, 1.0 - 0.92 * volRatioDiff));
+
+    const baseFullGameSd = marketImpliedPregame > 0.2
       ? Math.sqrt(Math.pow(posVolatility.cv * marketImpliedPregame, 2) + Math.pow(posVolatility.baseSd, 2))
       : 0;
+    const fullGameSd = baseFullGameSd * componentCvMult;
 
-    const remSdSleeper = fullGameSd * Math.pow(linearRem, 0.85);
+    const remSdSleeper = baseFullGameSd * Math.pow(linearRem, 0.85);
+    const baseRemSdImproved = isOut
+      ? 0
+      : baseFullGameSd * Math.sqrt(effectiveRem * bayesUsageMult * gameScriptMult) + (driveBonus > 0.3 ? 0.65 : 0);
     const remSdImproved = isOut
       ? 0
       : fullGameSd * Math.sqrt(effectiveRem * bayesUsageMult * gameScriptMult) + (driveBonus > 0.3 ? 0.65 : 0);
 
-    const dynamicSkew = effectiveRem > 0
+    const baseDynamicSkew = effectiveRem > 0
       ? Math.min(2.4, posVolatility.skew / Math.pow(Math.max(0.12, effectiveRem), 0.28))
       : 0;
+    const dynamicSkew = baseDynamicSkew * componentSkewMult;
 
     const floorVal = Math.max(currentPts, Number((improvedProj - 1.2816 * remSdImproved).toFixed(2)));
+    const p20FloorVal = Math.max(currentPts, Number((improvedProj - 0.8416 * remSdImproved + 0.22 * volRatioDiff * remMeanImproved).toFixed(2)));
     const ceilingVal = Number((improvedProj + 1.2816 * remSdImproved).toFixed(2));
 
     return {
@@ -1206,11 +1248,18 @@
       sleeperProj: Number(sleeperProj.toFixed(2)),
       improvedProj: Number(improvedProj.toFixed(2)),
       floor: floorVal,
+      p20Floor: p20FloorVal,
       ceiling: ceilingVal,
+      volumeFloorPts: Number(volumeFloorPts.toFixed(2)),
+      volumeFloorRatio,
       remMeanSleeper: Number(remMeanSleeper.toFixed(3)),
       remMeanImproved: Number(remMeanImproved.toFixed(3)),
       remSdSleeper: Number(remSdSleeper.toFixed(3)),
+      baseRemSdImproved: Number(baseRemSdImproved.toFixed(3)),
+      componentRemSdImproved: Number(remSdImproved.toFixed(3)),
       remSdImproved: Number(remSdImproved.toFixed(3)),
+      baseSkewness: Number(baseDynamicSkew.toFixed(3)),
+      componentSkewness: Number(dynamicSkew.toFixed(3)),
       skewness: Number(dynamicSkew.toFixed(3)),
       factors: {
         linearRemFrac: linearRem,
@@ -1658,8 +1707,21 @@
    */
   function runSimulationLineupOptimizer(stateData, targetRosterId = 3, options = {}) {
     const startMs = Date.now();
-    const numSims = options.numSims || 8000;
-    const objective = options.objective || 'expected_wins'; // 'expected_wins' | 'h2h' | 'median' | 'sweep_2_0' | 'points'
+    const opts = typeof options === 'number' ? { numSims: options, objective: arguments[3] } : (options || {});
+    const numSims = opts.numSims || 8000;
+    const objective = opts.objective || 'min_variance_floor';
+
+    // All 8 Floor & Variance Minimization Options (Individually toggleable, all enabled by default)
+    const optFlags = {
+      useTargetFloorSurvival: opts.useTargetFloorSurvival !== undefined ? Boolean(opts.useTargetFloorSurvival) : true,
+      useFloorVariancePenalty: opts.useFloorVariancePenalty !== undefined ? Boolean(opts.useFloorVariancePenalty) : true,
+      useAntiStackDiversification: opts.useAntiStackDiversification !== undefined ? Boolean(opts.useAntiStackDiversification) : true,
+      useComponentVariance: opts.useComponentVariance !== undefined ? Boolean(opts.useComponentVariance) : true,
+      useRollingEmpiricalFloor: opts.useRollingEmpiricalFloor !== undefined ? Boolean(opts.useRollingEmpiricalFloor) : true,
+      useIdpFloorOpt: opts.useIdpFloorOpt !== undefined ? Boolean(opts.useIdpFloorOpt) : true,
+      useConvictionFilter: opts.useConvictionFilter !== undefined ? Boolean(opts.useConvictionFilter) : true,
+      useAdaptivePosture: opts.useAdaptivePosture !== undefined ? Boolean(opts.useAdaptivePosture) : true
+    };
 
     const rostersData = stateData.rostersData || [];
     const targetTeamIdx = rostersData.findIndex((r) => r.rosterId === Number(targetRosterId));
@@ -1669,9 +1731,61 @@
     const oppRoster = rostersData.find((r) => r.matchupId === targetRoster.matchupId && r.rosterId !== targetRoster.rosterId) || null;
     const slots = stateData.league.starterSlots || [];
 
+    const adjustPlayerForOptions = (rawP) => {
+      if (!rawP || rawP.playerId === '0') return rawP;
+      const p = { ...rawP };
+      const rawBaseProj = p.rawStaticImprovedProj !== undefined ? p.rawStaticImprovedProj : p.improvedProj;
+      p.rawStaticImprovedProj = rawBaseProj;
+
+      let effRemSd = optFlags.useComponentVariance
+        ? (p.componentRemSdImproved !== undefined ? p.componentRemSdImproved : p.remSdImproved)
+        : (p.baseRemSdImproved !== undefined ? p.baseRemSdImproved : p.remSdImproved);
+      const effSkew = optFlags.useComponentVariance
+        ? (p.componentSkewness !== undefined ? p.componentSkewness : p.skewness)
+        : (p.baseSkewness !== undefined ? p.baseSkewness : p.skewness);
+
+      let empFloorBonus = 0;
+      const remFrac = p.factors?.linearRemFrac ?? (p.remMeanImproved > 0 ? 1.0 : 0);
+      if (optFlags.useRollingEmpiricalFloor && p.empiricalProfile && p.empiricalProfile.empGames >= 2 && remFrac > 0) {
+        const ep = p.empiricalProfile;
+        // Calibrate player volatility using empirical floor-to-mean consistency ratio (without distorting current-week Vegas mean projection)
+        const empConsistencyMult = Math.max(0.84, Math.min(1.16, 1.0 - 0.45 * ((ep.empFloorRatio || 0.68) - 0.68)));
+        effRemSd = effRemSd * empConsistencyMult;
+        if (ep.hotStreakLast2) {
+          empFloorBonus = 0.28 * remFrac;
+        }
+      }
+
+      p.empiricalAdjPts = Number(empFloorBonus.toFixed(2));
+      p.improvedProj = Number(rawBaseProj.toFixed(2));
+      p.remMeanImproved = Number(Math.max(0, p.improvedProj - p.currentPts).toFixed(3));
+      p.remSdImproved = Number(effRemSd.toFixed(3));
+      p.skewness = Number(effSkew.toFixed(3));
+
+      const volRatio = p.volumeFloorRatio ?? 0.58;
+      const volBonus = optFlags.useComponentVariance ? 0.16 * (volRatio - 0.58) * p.remMeanImproved : 0;
+      // Excess volatility relative to baseline positional SD (penalizes TD/sack-dependent volatility without penalizing higher mean projections!)
+      const excessPlayerSd = Math.max(0, p.remSdImproved - (p.baseRemSdImproved || p.remSdImproved));
+      const savedPlayerSd = Math.max(0, (p.baseRemSdImproved || p.remSdImproved) - p.remSdImproved);
+      p.p20Floor = Number(Math.max(p.currentPts, p.improvedProj - 0.8416 * p.remSdImproved + volBonus + empFloorBonus).toFixed(2));
+      p.floor = Number(Math.max(p.currentPts, p.improvedProj - 1.2816 * p.remSdImproved + 0.5 * volBonus + 0.5 * empFloorBonus).toFixed(2));
+      p.ceiling = Number((p.improvedProj + 1.2816 * p.remSdImproved).toFixed(2));
+
+      p.riskAdjustedScore = Number(
+        (
+          p.improvedProj +
+          (optFlags.useFloorVariancePenalty ? 0.15 * savedPlayerSd - 0.18 * excessPlayerSd + 0.20 * volBonus + empFloorBonus : 0)
+        ).toFixed(3)
+      );
+      return p;
+    };
+
+    const rawStartersAdjusted = (targetRoster.rawStarters || targetRoster.starters || []).map(adjustPlayerForOptions);
+    const rawBenchAdjusted = (targetRoster.rawBench || targetRoster.bench || []).map(adjustPlayerForOptions);
+
     // Gather all unique players on targetRoster (starters + bench) with positive projection or completed points
     const allRosterPlayersMap = new Map();
-    for (const p of [...(targetRoster.rawStarters || targetRoster.starters), ...(targetRoster.rawBench || targetRoster.bench)]) {
+    for (const p of [...rawStartersAdjusted, ...rawBenchAdjusted]) {
       if (p && p.playerId !== '0' && (p.improvedProj > 0.2 || p.currentPts > 0)) {
         allRosterPlayersMap.set(p.playerId, p);
       }
@@ -2052,10 +2166,12 @@
       const indepSd = Math.sqrt(Math.max(1.0, indepVar));
 
       const activeIds = new Int32Array(simIds);
+      const targetWinScore = Number(Math.max(medMeanExact, 0.58 * medMeanExact + 0.42 * oppMeanExact).toFixed(2));
       let h2hWins = 0;
       let medWins = 0;
       let bothWins = 0;
       let zeroWins = 0;
+      let hitTargetSum = 0;
       let sumScore = 0;
       let sumSqScore = 0;
       const samples = new Float32Array(numSims);
@@ -2088,8 +2204,10 @@
 
         const pH2H = 1 / (1 + Math.exp(-diff / 2.2));
         const pMed = 1 / (1 + Math.exp(-(score - medS) / 2.2));
+        const pTgt = 1 / (1 + Math.exp(-(score - targetWinScore) / 2.2));
         const hardH2H = score > oppS ? 1 : (score === oppS ? 0.5 : 0);
         const hardMed = score > medS ? 1 : (score === medS ? 0.5 : 0);
+        const hardTgt = score >= targetWinScore ? 1 : 0;
 
         const wonH2H = 0.65 * pH2H + 0.35 * hardH2H;
         const wonMed = 0.65 * pMed + 0.35 * hardMed;
@@ -2097,26 +2215,39 @@
         medWins += wonMed;
         bothWins += wonH2H * wonMed;
         zeroWins += (1 - wonH2H) * (1 - wonMed);
+        hitTargetSum += 0.65 * pTgt + 0.35 * hardTgt;
       }
 
       samples.sort();
       const meanSim = sumScore / numSims;
       const sdSim = Math.sqrt(Math.max(0, sumSqScore / numSims - meanSim * meanSim));
 
+      // Compute 20th-percentile floor (p20) and Expected Shortfall / CVaR in the worst 20% of trials (cvar20)
+      const p20Val = Number(samples[Math.floor(numSims * 0.20)].toFixed(2));
+      const cvarCount = Math.max(1, Math.floor(numSims * 0.20));
+      let cvarSum = 0;
+      for (let i = 0; i < cvarCount; i++) cvarSum += samples[i];
+      const cvar20Val = Number((cvarSum / cvarCount).toFixed(2));
+
       // Exact analytical correlated win probabilities (zero finite-sample noise)
       const h2hDiffSd = Math.sqrt(Math.max(9.0, exactVar + oppVarExact - 2 * oppCov));
       const medDiffSd = Math.sqrt(Math.max(9.0, exactVar + medVarExact));
+      const tgtDiffSd = Math.sqrt(Math.max(9.0, exactVar + 0.35 * medVarExact));
       const exactH2hProb = normalCdf((expectedPts - oppMeanExact) / h2hDiffSd);
       const exactMedProb = normalCdf((expectedPts - medMeanExact) / medDiffSd);
+      const exactTgtProb = normalCdf((expectedPts - targetWinScore) / tgtDiffSd);
 
       const mcH2hProb = h2hWins / numSims;
       const mcMedProb = medWins / numSims;
+      const mcTgtProb = hitTargetSum / numSims;
 
       const h2hProb = 0.55 * exactH2hProb + 0.45 * mcH2hProb;
       const medProb = 0.55 * exactMedProb + 0.45 * mcMedProb;
+      const probHitTarget = 0.55 * exactTgtProb + 0.45 * mcTgtProb;
       const prob2_0 = bothWins / numSims;
       const prob0_2 = zeroWins / numSims;
       const prob1_1 = Math.max(0, 1 - prob2_0 - prob0_2);
+      const probAvoid0_2 = Math.max(0, 1 - prob0_2);
       const expWins = h2hProb + medProb;
 
       let distribution = null;
@@ -2130,9 +2261,14 @@
           indepP10: Number(indepSamples[Math.floor(numSims * 0.10)].toFixed(2)),
           indepP90: Number(indepSamples[Math.floor(numSims * 0.90)].toFixed(2)),
           oppMean: Number(oppMeanExact.toFixed(2)),
-          medCutoffMean: Number(medMeanExact.toFixed(2))
+          medCutoffMean: Number(medMeanExact.toFixed(2)),
+          targetWinScore
         };
       }
+
+      const avgVolumeFloorRatio = activePlayers.length
+        ? Number((activePlayers.reduce((s, p) => s + (p.volumeFloorRatio ?? 0.58), 0) / activePlayers.length).toFixed(3))
+        : 0.58;
 
       return {
         pureVegasPts: Number(pureVegasPts.toFixed(2)),
@@ -2147,11 +2283,17 @@
         teamConcVar: Number(totalTeamConcVar.toFixed(2)),
         p05: Number(samples[Math.floor(numSims * 0.05)].toFixed(2)),
         p10: Number(samples[Math.floor(numSims * 0.10)].toFixed(2)),
+        p20: p20Val,
+        cvar20: cvar20Val,
         p25: Number(samples[Math.floor(numSims * 0.25)].toFixed(2)),
         p50: Number(samples[Math.floor(numSims * 0.50)].toFixed(2)),
         p75: Number(samples[Math.floor(numSims * 0.75)].toFixed(2)),
         p90: Number(samples[Math.floor(numSims * 0.90)].toFixed(2)),
         p95: Number(samples[Math.floor(numSims * 0.95)].toFixed(2)),
+        targetWinScore,
+        probHitTarget: Number(probHitTarget.toFixed(4)),
+        probAvoid0_2: Number(probAvoid0_2.toFixed(4)),
+        avgVolumeFloorRatio,
         h2hWinProb: Number(h2hProb.toFixed(4)),
         medianWinProb: Number(medProb.toFixed(4)),
         prob2_0: Number(prob2_0.toFixed(4)),
@@ -2168,8 +2310,8 @@
     //  - Locked starters cannot be moved out of their current starting slot or slid to another slot.
     //  - Locked bench players cannot be subbed into any starting slot.
     const isHistPregame = Boolean(stateData.isHistoricalPregame);
-    const rawStarters = targetRoster.rawStarters || targetRoster.starters;
-    const rawBench = targetRoster.rawBench || targetRoster.bench || [];
+    const rawStarters = rawStartersAdjusted;
+    const rawBench = rawBenchAdjusted;
     const lockedSlots = new Array(slots.length).fill(null);
     const lockedPlayerIds = new Set();
 
@@ -2194,7 +2336,7 @@
       if (!isHistPregame && isPlayerLocked(p)) return false;
       const isOut = ['Out', 'IR', 'Doubtful', 'Suspension', 'COV'].includes(p.injuryStatus);
       return p.gameStatus !== 'bye' && !isOut && p.improvedProj > 0.5;
-    }).sort((a, b) => b.improvedProj - a.improvedProj);
+    }).sort((a, b) => (b.riskAdjustedScore ?? b.improvedProj) - (a.riskAdjustedScore ?? a.improvedProj) || b.improvedProj - a.improvedProj);
 
     const qbs = activePool.filter((p) => p.canonicalPos === 'QB').slice(0, 4);
     const rbs = activePool.filter((p) => p.canonicalPos === 'RB').slice(0, 6);
@@ -2216,7 +2358,7 @@
       return eligible.slice(0, limit);
     });
 
-    // Greedy baseline max-projection lineup first
+    // Greedy baseline max-projection and floor-adjusted lineups
     function buildGreedyLineup(scoreKey = 'improvedProj') {
       const used = new Set(lockedPlayerIds);
       const lineup = [...lockedSlots];
@@ -2229,7 +2371,7 @@
         if (lineup[i]) continue;
         const candidates = activePool
           .filter((p) => !used.has(p.playerId) && isEligibleForSlot(p, s))
-          .sort((a, b) => b[scoreKey] - a[scoreKey]);
+          .sort((a, b) => (b[scoreKey] ?? b.improvedProj) - (a[scoreKey] ?? a.improvedProj));
         if (candidates.length > 0) {
           lineup[i] = { ...candidates[0], slot: s };
           used.add(candidates[0].playerId);
@@ -2241,20 +2383,24 @@
     }
 
     const maxPtsLineup = buildGreedyLineup('improvedProj');
+    const floorGreedyLineup = buildGreedyLineup('riskAdjustedScore');
+    const p20GreedyLineup = buildGreedyLineup('p20Floor');
     const sleeperMaxLineup = buildGreedyLineup('sleeperProj');
     const maxPtsBenchmark = maxPtsLineup.reduce((acc, p) => acc + (p ? p.improvedProj : 0), 0);
 
-    // Lock IDP slots in slotPools to their optimal maxPtsLineup assignment so searchLineups
-    // dedicates all 240 candidates to distinct offensive QB/RB/WR/TE/FLEX/SUPER_FLEX combinations
-    // instead of permuting inferior IDP combinations.
+    // Option 6 (useIdpFloorOpt): Select the 4 IDP slots using tackle-floor & variance-adjusted scoring (`floorGreedyLineup`)
+    // when enabled (or raw `maxPtsLineup` when disabled), and lock the 4 leaf IDP slots during offensive DFS so all 400
+    // DFS branches explore distinct offensive QB/RB/WR/TE/FLEX/SUPER_FLEX combinations without leaf-node explosion!
+    const chosenIdpBaseLineup = optFlags.useIdpFloorOpt ? floorGreedyLineup : maxPtsLineup;
     for (let idx = 0; idx < slots.length; idx++) {
-      if (['DL', 'LB', 'DB', 'IDP_FLEX'].includes(slots[idx]) && maxPtsLineup[idx]) {
-        slotPools[idx] = [maxPtsLineup[idx]];
+      if (lockedSlots[idx]) continue;
+      if (['DL', 'LB', 'DB', 'IDP_FLEX'].includes(slots[idx]) && chosenIdpBaseLineup[idx]) {
+        slotPools[idx] = [chosenIdpBaseLineup[idx]];
       }
     }
 
-    // Always seed candidateLineups with maxPtsLineup and sleeperMaxLineup first
-    for (const seedLineup of [maxPtsLineup, sleeperMaxLineup]) {
+    // Always seed candidateLineups with floorGreedyLineup, p20GreedyLineup, maxPtsLineup, and sleeperMaxLineup first
+    for (const seedLineup of [floorGreedyLineup, p20GreedyLineup, maxPtsLineup, sleeperMaxLineup]) {
       const idsKey = seedLineup.map((p) => p.playerId).slice().sort().join(',');
       if (!seenLineupSets.has(idsKey)) {
         seenLineupSets.add(idsKey);
@@ -2386,6 +2532,35 @@
     const currentSetMetrics = evaluateCandidateLineup(rawStarters, true);
     const sleeperMaxMetrics = evaluateCandidateLineup(sleeperMaxLineup, true);
 
+    // Option 8 (useAdaptivePosture): Determine Live Opponent & Median Conditioned Posture
+    const lockedCountNow = lockedSlots.filter(Boolean).length;
+    let adaptivePosture = {
+      mode: 'MIN_OUTCOME_TARGET',
+      label: `🎯 Minimum Outcome & Variance Minimization (Target ≥ ${currentSetMetrics.targetWinScore.toFixed(1)} Pts & Avoid 0-2)`,
+      lambdaSd: 0.012,
+      stackPen: 0.008,
+      floorWeight: 0.025
+    };
+    if (optFlags.useAdaptivePosture) {
+      if (currentSetMetrics.h2hWinProb < 0.25 && currentSetMetrics.medianWinProb < 0.25 && lockedCountNow >= 5) {
+        adaptivePosture = {
+          mode: 'CHASE_CEILING',
+          label: '🚀 Late-Week Deficit Chase Posture (Trailing Both H2H & Median — Maximizing p90 Ceiling & Stack Upside)',
+          lambdaSd: -0.012,
+          stackPen: -0.012,
+          floorWeight: 0.005
+        };
+      } else if (currentSetMetrics.h2hWinProb >= 0.58 && currentSetMetrics.medianWinProb >= 0.58) {
+        adaptivePosture = {
+          mode: 'PROTECT_LEAD',
+          label: `🛡️ Favored Lead-Protection Posture (H2H ${(currentSetMetrics.h2hWinProb * 100).toFixed(0)}% / Med ${(currentSetMetrics.medianWinProb * 100).toFixed(0)}% — Locking Down p20 Floor & Minimizing σ)`,
+          lambdaSd: 0.016,
+          stackPen: 0.011,
+          floorWeight: 0.030
+        };
+      }
+    }
+
     // Evaluate all candidate lineups on the 10,000 CRN simulations
     const evaluatedCandidates = candidateLineups.map((lineup) => {
       const metrics = evaluateCandidateLineup(lineup, false);
@@ -2400,17 +2575,50 @@
       };
     });
 
-    // Sort candidate lineups by the selected optimization objective
-    // For total_wins, include a season-points-for tiebreaker weight (0.008 E[W] per expected point)
-    // so the solver does not bench a higher-projected starter solely to trim QB-stack variance when favored.
+    // Compute Composite Objective Score incorporating Options 1, 2, 3, and 8
+    // Uses exact analytical risk-adjusted floor & excess variance so higher mean projections are never
+    // penalized for normal scale variance, while excess TD/sack volatility & same-team stack variance ARE penalized.
+    const computeCandidateScore = (c) => {
+      const m = c.metrics;
+      const lineupRiskAdjPts = c.lineup.reduce((s, p) => s + ((p && (p.riskAdjustedScore ?? p.improvedProj)) || 0), 0);
+      const excessStackSd = Math.max(0, m.volatilityDeltaSd);
+
+      if (objective === 'h2h') {
+        return m.h2hWinProb + 0.035 * lineupRiskAdjPts - (optFlags.useAntiStackDiversification ? 0.012 * excessStackSd : 0);
+      }
+      if (objective === 'median') {
+        return m.medianWinProb + 0.035 * lineupRiskAdjPts - (optFlags.useAntiStackDiversification ? 0.012 * excessStackSd : 0);
+      }
+      if (objective === 'sweep_2_0') {
+        return m.prob2_0 + 0.25 * m.expectedWeeklyWins + 0.025 * lineupRiskAdjPts;
+      }
+      if (objective === 'points') {
+        return m.expectedPts;
+      }
+      if (objective === 'cvar_p20') {
+        return lineupRiskAdjPts - 0.85 * excessStackSd + 1.5 * m.probAvoid0_2 + 1.2 * m.expectedWeeklyWins;
+      }
+
+      // Default ('min_variance_floor', 'total_wins', 'expected_wins', 'adaptive_posture', 'dual')
+      let score = m.expectedWeeklyWins;
+      if (optFlags.useTargetFloorSurvival || objective === 'min_variance_floor') {
+        score += 0.35 * m.probHitTarget + 0.30 * m.probAvoid0_2;
+      }
+      if (optFlags.useFloorVariancePenalty) {
+        score += 0.045 * lineupRiskAdjPts;
+      } else {
+        score += 0.045 * m.expectedPts;
+      }
+      if (optFlags.useAntiStackDiversification) {
+        score -= adaptivePosture.stackPen * excessStackSd;
+      }
+      return score;
+    };
+
     const sortFn = (a, b) => {
-      if (objective === 'h2h') return b.metrics.h2hWinProb - a.metrics.h2hWinProb || b.metrics.expectedPts - a.metrics.expectedPts;
-      if (objective === 'median') return b.metrics.medianWinProb - a.metrics.medianWinProb || b.metrics.expectedPts - a.metrics.expectedPts;
-      if (objective === 'sweep_2_0') return b.metrics.prob2_0 - a.metrics.prob2_0 || b.metrics.expectedWeeklyWins - a.metrics.expectedWeeklyWins;
-      if (objective === 'points') return b.metrics.expectedPts - a.metrics.expectedPts;
-      const scoreA = a.metrics.expectedWeeklyWins + 0.045 * a.metrics.expectedPts;
-      const scoreB = b.metrics.expectedWeeklyWins + 0.045 * b.metrics.expectedPts;
-      return scoreB - scoreA || b.metrics.expectedPts - a.metrics.expectedPts;
+      const sA = computeCandidateScore(a);
+      const sB = computeCandidateScore(b);
+      return sB - sA || b.metrics.p20 - a.metrics.p20 || b.metrics.expectedPts - a.metrics.expectedPts;
     };
 
     evaluatedCandidates.sort(sortFn);
@@ -2487,11 +2695,52 @@
       return optLineup;
     }
 
-    const alignedOptimalLineup = alignLineupSlotsWithCurrent(rawOptimalCandidate.lineup, rawStarters);
+    let alignedOptimalLineup = alignLineupSlotsWithCurrent(rawOptimalCandidate.lineup, rawStarters);
+
+    // Option 7 (useConvictionFilter): Filter out low-conviction micro-edge noise swaps (< 0.55 pts)
+    // unless the incoming player meaningfully raises p20 floor, OR when the outgoing starter has a strong
+    // multi-week empirical floor that exceeds their static projection.
+    if (optFlags.useConvictionFilter) {
+      const optPids = new Set(alignedOptimalLineup.map((p) => p?.playerId).filter(Boolean));
+      const rawPids = new Set(rawStarters.map((p) => p?.playerId).filter(Boolean));
+      let filteredAny = false;
+      const filteredLineup = alignedOptimalLineup.map((inP, sIdx) => {
+        const outP = rawStarters[sIdx];
+        if (!outP || !inP || outP.playerId === inP.playerId) return inP;
+        // Only filter direct 1-for-1 bench-for-starter replacements where outP is healthy/active
+        if (optPids.has(outP.playerId) || rawPids.has(inP.playerId)) return inP;
+        const outIsInactive = outP.gameStatus === 'bye' || ['Out', 'IR', 'Doubtful', 'Suspension', 'COV'].includes(outP.injuryStatus) || outP.improvedProj <= 1.0;
+        if (outIsInactive) return inP;
+
+        const projGain = (inP.improvedProj || 0) - (outP.improvedProj || 0);
+        const p20Gain = (inP.p20Floor ?? inP.floor ?? 0) - (outP.p20Floor ?? outP.floor ?? 0);
+        const outEmp = outP.empiricalProfile;
+
+        const isMicroNoise = Boolean(outEmp && projGain < 0.48 && p20Gain < 0.40);
+        const isHotEmpiricalStarter =
+          outEmp &&
+          outEmp.hotStreakLast2 &&
+          outEmp.empP25Floor >= (outP.improvedProj || 8) * 0.88 &&
+          projGain < 1.15;
+
+        if (isMicroNoise || isHotEmpiricalStarter) {
+          filteredAny = true;
+          optPids.delete(inP.playerId);
+          optPids.add(outP.playerId);
+          return { ...outP, slot: slots[sIdx] };
+        }
+        return inP;
+      });
+      if (filteredAny) {
+        alignedOptimalLineup = filteredLineup;
+      }
+    }
+
     const optimalCandidate = {
       ...rawOptimalCandidate,
       lineup: alignedOptimalLineup,
-      metrics: evaluateCandidateLineup(alignedOptimalLineup, true)
+      metrics: evaluateCandidateLineup(alignedOptimalLineup, true),
+      ...analyzeLineupCorrelations(alignedOptimalLineup)
     };
 
     // Identify true swaps between Optimal Lineup and Current Set Lineup
@@ -2622,7 +2871,19 @@
 
         const projDelta = Number((((inPlayer && inPlayer.improvedProj) || 0) - ((outPlayer && outPlayer.improvedProj) || 0)).toFixed(2));
         const sleeperDelta = Number((((inPlayer && inPlayer.sleeperProj) || 0) - ((outPlayer && outPlayer.sleeperProj) || 0)).toFixed(2));
+        const p20FloorDelta = Number((((inPlayer && (inPlayer.p20Floor ?? inPlayer.floor)) || 0) - ((outPlayer && (outPlayer.p20Floor ?? outPlayer.floor)) || 0)).toFixed(2));
+        const sdDelta = Number((((inPlayer && inPlayer.remSdImproved) || 0) - ((outPlayer && outPlayer.remSdImproved) || 0)).toFixed(2));
+        const inVolFloorPct = inPlayer ? Math.round((inPlayer.volumeFloorRatio ?? 0.58) * 100) : 58;
+        const outVolFloorPct = outPlayer ? Math.round((outPlayer.volumeFloorRatio ?? 0.58) * 100) : 58;
         const reasons = buildSwapReasons(outPlayer, inPlayer, outSlot, inSlot, slideSteps, projDelta);
+        if (p20FloorDelta >= 0.5) {
+          reasons.push(`Raises p20 downside floor by +${p20FloorDelta.toFixed(2)} pts`);
+        }
+        if (sdDelta < -0.15) {
+          reasons.push(`Reduces player volatility (Δσ ${sdDelta.toFixed(2)} pts, ${inVolFloorPct}% volume floor)`);
+        } else if (inPlayer?.empiricalProfile?.empGames >= 2 && inPlayer.empiricalProfile.empP25Floor >= (inPlayer.pregameProj || 8) * 0.9) {
+          reasons.push(`Strong ${inPlayer.empiricalProfile.empGames}-wk empirical floor (${inPlayer.empiricalProfile.empP25Floor.toFixed(1)} pts)`);
+        }
 
         swaps.push({
           slotIndex: outSlotIndex,
@@ -2640,8 +2901,12 @@
           isTrueRemoval: currId === '0' || !candIds.has(currId),
           projDelta,
           sleeperDelta,
+          p20FloorDelta,
+          sdDelta,
+          inVolFloorPct,
+          outVolFloorPct,
           reasons,
-          summaryReason: reasons.join(' • ') || 'Optimizes joint simulation win probability & volatility'
+          summaryReason: reasons.join(' • ') || 'Optimizes joint simulation win probability & downside floor'
         });
       }
 
@@ -2877,6 +3142,8 @@
       isPlayerLocked,
       lockedSlots,
       lockedStarterCount: lockedSlots.filter(Boolean).length,
+      optFlags,
+      adaptivePosture,
       recommendedSwaps,
       rosterCorrMatrix,
       allRosterPlayers: rosterPool.sort((a, b) => b.improvedProj - a.improvedProj)
@@ -3023,6 +3290,88 @@
         autoSubCount
       };
     });
+  }
+
+  /**
+   * Fetch prior completed weeks (up to 4 prior weeks: max(1, activeWeek - 4) .. activeWeek - 1)
+   * and attach a Rolling Multi-Week Empirical Floor & Consistency Profile (`p.empiricalProfile`)
+   * to every rostered player with zero hindsight leakage.
+   */
+  async function fetchAndAttachRollingEmpiricalProfiles(leagueId, activeWeek, rostersData) {
+    if (!activeWeek || activeWeek <= 1 || !Array.isArray(rostersData)) return;
+    const startW = Math.max(1, activeWeek - 4);
+    const priorWeeks = [];
+    for (let w = startW; w < activeWeek; w++) priorWeeks.push(w);
+    if (!priorWeeks.length) return;
+
+    const priorMatchupsByWeek = await Promise.all(
+      priorWeeks.map((w) =>
+        fetchJson(`https://api.sleeper.app/v1/league/${leagueId}/matchups/${w}`, {}, 3600000).catch(() => [])
+      )
+    );
+
+    const playerHistoryMap = new Map();
+    for (let idx = 0; idx < priorWeeks.length; idx++) {
+      const mList = priorMatchupsByWeek[idx] || [];
+      for (const m of mList) {
+        const ptsMap = m.players_points || {};
+        const stSet = new Set((m.starters || []).map(String));
+        for (const [pid, rawPts] of Object.entries(ptsMap)) {
+          const pts = Number(rawPts || 0);
+          // Count game as active if player scored > 0.5 pts or was in a starting lineup
+          if (pts > 0.5 || stSet.has(String(pid))) {
+            if (!playerHistoryMap.has(String(pid))) playerHistoryMap.set(String(pid), []);
+            playerHistoryMap.get(String(pid)).push(pts);
+          }
+        }
+      }
+    }
+
+    const annotatePlayer = (p) => {
+      if (!p || !p.playerId || p.playerId === '0') return;
+      const rawScores = playerHistoryMap.get(String(p.playerId)) || [];
+      const scores = rawScores.filter((x) => x > 1.5);
+      if (scores.length < 1) {
+        p.empiricalProfile = null;
+        return;
+      }
+      const k = scores.length;
+      const empMean = Number((scores.reduce((s, x) => s + x, 0) / k).toFixed(2));
+      const sorted = [...scores].sort((a, b) => a - b);
+      const q25Idx = 0.25 * (k - 1);
+      const lo = Math.floor(q25Idx);
+      const hi = Math.min(k - 1, lo + 1);
+      const frac = q25Idx - lo;
+      const empP25Floor = Number((sorted[lo] + frac * (sorted[hi] - sorted[lo])).toFixed(2));
+      const empMinFloor = Number(sorted[0].toFixed(2));
+      const empSd = Number(Math.sqrt(scores.reduce((s, x) => s + Math.pow(x - empMean, 2), 0) / k).toFixed(2));
+      const empFloorRatio = empMean > 1.0 ? Number(Math.max(0.30, Math.min(0.95, empP25Floor / empMean)).toFixed(3)) : 0.65;
+      const baseRef = Math.max(4.0, p.pregameProj || p.improvedProj || 8.0);
+      const empConsistency = Number((scores.filter((x) => x >= 0.75 * baseRef).length / k).toFixed(2));
+      const last2Scores = scores.slice(-2);
+      const hotStreakLast2 = last2Scores.length === 2 && last2Scores[0] >= baseRef * 1.08 && last2Scores[1] >= baseRef * 1.15;
+      const empFloorEdge = Number((empP25Floor - baseRef).toFixed(2));
+
+      p.empiricalProfile = {
+        empGames: k,
+        empMean,
+        empP25Floor,
+        empMinFloor,
+        empSd,
+        empFloorRatio,
+        empConsistency,
+        hotStreakLast2,
+        empFloorEdge,
+        recentScores: scores
+      };
+    };
+
+    for (const r of rostersData) {
+      for (const p of (r.rawStarters || [])) annotatePlayer(p);
+      for (const p of (r.rawBench || [])) annotatePlayer(p);
+      for (const p of (r.starters || [])) annotatePlayer(p);
+      for (const p of (r.bench || [])) annotatePlayer(p);
+    }
   }
 
   async function getLeagueLiveState(leagueId = DEFAULT_LEAGUE_ID, requestedWeek = null, forceRefresh = false, autoSubByeOut = false, marketWeight = 1.0, marketSource = 'consensus') {
@@ -3218,6 +3567,8 @@
       }
     }
     waiverIdpPlayers.sort((a, b) => (b.sportsbookProj ?? b.improvedProj) - (a.sportsbookProj ?? a.improvedProj) || b.improvedProj - a.improvedProj);
+
+    await fetchAndAttachRollingEmpiricalProfiles(leagueId, activeWeek, rostersData);
 
     if (autoSubByeOut) {
       rostersData = applyAutoSubForByeOrOut(rostersData);
@@ -3422,6 +3773,8 @@
       };
     });
 
+    await fetchAndAttachRollingEmpiricalProfiles(leagueId, activeWeek, rostersData);
+
     const histRosteredIds = new Set();
     for (const m of matchups) {
       for (const pid of (m.players || [])) histRosteredIds.add(String(pid));
@@ -3577,8 +3930,9 @@
         if (inCi80) tEntry.ci80CoveredWeeks += 1;
       }
 
-      // Run pregame simulation optimizer for targetRosterId in Week w
+      // Run pregame simulation optimizer for targetRosterId in Week w, forwarding all 8 floor/variance options
       const opt = runSimulationLineupOptimizer(state, targetRosterId, {
+        ...options,
         numSims: 4000,
         objective,
         marketWeight
